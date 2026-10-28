@@ -56,4 +56,5 @@
   <string name="settings_privacy">Privacy</string>
   <string name="settings_saved_token">Saved access token</string>
   <string name="settings_about">About &amp; licenses</string>
+  <string name="model_catalog_load_failed">Could not load the model list</string>
 </resources>

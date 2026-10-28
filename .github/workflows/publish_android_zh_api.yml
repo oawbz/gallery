@@ -43,9 +43,36 @@ jobs:
           echo "ANDROID_SDK_ROOT=$sdk_dir" >> "$GITHUB_ENV"
       - name: Validate Chinese resources
         run: python3 tools/check_zh_resources.py
+      - name: Restore persistent signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_SIGNING_KEYSTORE_BASE64 }}
+          SIGNING_PASSWORD: ${{ secrets.ANDROID_SIGNING_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ] && [ -n "$SIGNING_PASSWORD" ]; then
+            python3 - <<'PY_SIGNING'
+          import base64, os, pathlib
+          p = pathlib.Path(os.environ['RUNNER_TEMP']) / 'gallery-signing.p12'
+          p.write_bytes(base64.b64decode(os.environ['KEYSTORE_BASE64'], validate=True))
+          p.chmod(0o600)
+          with open(os.environ['GITHUB_ENV'], 'a') as f:
+              f.write(f'GALLERY_SIGNING_KEYSTORE={p}\n')
+          PY_SIGNING
+          else
+            echo "Signing secrets are not configured. Tests may run, but publishing will be blocked."
+          fi
       - name: Test and build APK
+        env:
+          GALLERY_SIGNING_PASSWORD: ${{ secrets.ANDROID_SIGNING_PASSWORD }}
         working-directory: Android/src
         run: bash gradlew --no-daemon --max-workers=2 :app:testDebugUnitTest :app:assembleDebug --console=plain
+      - name: Require stable signing before publishing
+        env:
+          SIGNING_PASSWORD: ${{ secrets.ANDROID_SIGNING_PASSWORD }}
+        run: |
+          if [ -z "${GALLERY_SIGNING_KEYSTORE:-}" ] || [ -z "$SIGNING_PASSWORD" ]; then
+            echo "::error::Configure ANDROID_SIGNING_KEYSTORE_BASE64 and ANDROID_SIGNING_PASSWORD using tools/configure_android_signing.py. Refusing to publish a newly generated debug signature."
+            exit 1
+          fi
       - name: Prepare download
         run: |
           cp Android/src/app/build/outputs/apk/debug/app-debug.apk gallery-zh-openai-api.apk
@@ -67,6 +94,6 @@ jobs:
           set -euo pipefail
           if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release create "$RELEASE_TAG" --target "$GITHUB_SHA" --prerelease \
-              --title 'Gallery 1.0.20-lan1 · 局域网修复与界面优化' --notes-file docs/ANDROID_RELEASE.zh-CN.md
+              --title 'Gallery 1.0.20-lan2 · 启动列表修复与固定签名' --notes-file docs/ANDROID_RELEASE.zh-CN.md
           fi
           gh release upload "$RELEASE_TAG" gallery-zh-openai-api.apk gallery-zh-openai-api.apk.sha256 --clobber

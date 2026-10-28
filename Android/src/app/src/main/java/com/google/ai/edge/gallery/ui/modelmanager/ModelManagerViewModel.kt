@@ -28,10 +28,10 @@ import com.google.ai.edge.gallery.BuildConfig
 import com.google.ai.edge.gallery.R
 import com.google.ai.edge.gallery.common.ProjectConfig
 import com.google.ai.edge.gallery.common.SystemPromptHelper
-import com.google.ai.edge.gallery.common.getJsonResponse
 import com.google.ai.edge.gallery.common.getModelStorageDir
 import com.google.ai.edge.gallery.common.isAICoreSupported
 import com.google.ai.edge.gallery.customtasks.common.CustomTask
+import com.google.ai.edge.gallery.data.ModelCatalogLoader
 import com.google.ai.edge.gallery.data.Accelerator
 import com.google.ai.edge.gallery.data.BackendSpec
 import com.google.ai.edge.gallery.data.BuiltInTaskId
@@ -106,8 +106,6 @@ import net.openid.appauth.ResponseTypeValues
 private const val TAG = "AGModelManagerViewModel"
 private const val TEXT_INPUT_HISTORY_MAX_SIZE = 50
 private const val MODEL_ALLOWLIST_FILENAME = "model_allowlist.json"
-private const val ALLOWLIST_BASE_URL =
-  "https://raw.githubusercontent.com/google-ai-edge/gallery/refs/heads/main/model_allowlists"
 private const val PLACEHOLDER_FILENAME = "placeholder"
 private const val UNPACKED_FILE_EXT = "unpacked"
 
@@ -1291,24 +1289,18 @@ constructor(
         }
 
         if (modelAllowlist == null) {
-          // Load from github.
-          var version = BuildConfig.VERSION_NAME.replace(".", "_")
-          val url = getAllowlistUrl(version)
-          Log.d(TAG, "Loading model allowlist from internet. Url: $url")
-          val data = getJsonResponse<ModelAllowlist>(url = url)
-          modelAllowlist = data?.jsonObj
-
-          if (modelAllowlist == null) {
-            Log.w(TAG, "Failed to load model allowlist from internet. Trying to load it from disk")
-            modelAllowlist = readModelAllowlistFromDisk()
-          } else {
-            Log.d(TAG, "Done: loading model allowlist from internet")
-            saveModelAllowlistToDisk(modelAllowlistContent = data?.textContent ?: "{}")
-          }
+          val loaded = ModelCatalogLoader.load(
+            remote = { ModelCatalogLoader.fetch() },
+            cached = { File(modelsDir, MODEL_ALLOWLIST_FILENAME).takeIf { it.isFile }?.readText() },
+            bundled = { context.assets.open(ModelCatalogLoader.ASSET).bufferedReader().use { it.readText() } },
+            saveRemote = { saveModelAllowlistToDisk(it) },
+          )
+          modelAllowlist = loaded?.catalog
+          Log.d(TAG, "Model catalog source: ${loaded?.source}")
         }
 
         if (modelAllowlist == null) {
-          _uiState.update { it.copy(loadingModelAllowlistError = "Failed to load model list") }
+          _uiState.update { it.copy(loadingModelAllowlist = false, loadingModelAllowlistError = context.getString(R.string.model_catalog_load_failed)) }
           return@launch
         }
 
@@ -1431,8 +1423,11 @@ constructor(
         startAutoDownloadModels()
         refreshSupplementaryStatuses()
         Log.d(TAG, "loadModelAllowlist: Done")
+      } catch (e: CancellationException) {
+        throw e
       } catch (e: Exception) {
         Log.e(TAG, "Failed to load model allowlist", e)
+        _uiState.update { it.copy(loadingModelAllowlist = false, loadingModelAllowlistError = context.getString(R.string.model_catalog_load_failed)) }
       }
     }
   }
@@ -1913,10 +1908,6 @@ constructor(
 
     return downloadedFileExists || unzippedDirectoryExists
   }
-}
-
-private fun getAllowlistUrl(version: String): String {
-  return "$ALLOWLIST_BASE_URL/${version}.json"
 }
 
 /**

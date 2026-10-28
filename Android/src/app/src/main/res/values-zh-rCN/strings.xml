@@ -1006,4 +1006,5 @@
   <string name="settings_privacy">隐私</string>
   <string name="settings_saved_token">已保存的访问令牌</string>
   <string name="settings_about">关于与许可</string>
+  <string name="model_catalog_load_failed">无法加载模型列表</string>
 </resources>

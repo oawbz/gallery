@@ -28,6 +28,12 @@ plugins {
   alias(libs.plugins.ksp)
 }
 
+val persistentKeystore = providers.environmentVariable("GALLERY_SIGNING_KEYSTORE").orNull?.takeIf { it.isNotBlank() }
+val persistentPassword = providers.environmentVariable("GALLERY_SIGNING_PASSWORD").orNull?.takeIf { it.isNotBlank() }
+require((persistentKeystore == null) == (persistentPassword == null)) {
+  "Set both GALLERY_SIGNING_KEYSTORE and GALLERY_SIGNING_PASSWORD for persistent signing"
+}
+
 android {
   namespace = "com.google.ai.edge.gallery"
   compileSdk { this.version = release(37) { minorApiLevel = 0 } }
@@ -36,8 +42,8 @@ android {
     applicationId = "com.google.aiedge.gallery"
     minSdk = 31
     targetSdk = 37
-    versionCode = 47
-    versionName = "1.0.20-lan1"
+    versionCode = 48
+    versionName = "1.0.20-lan2"
 
     // Needed for HuggingFace auth workflows.
     // Use the scheme of the "Redirect URLs" in HuggingFace app.
@@ -51,11 +57,26 @@ android {
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
 
+  if (persistentKeystore != null && persistentPassword != null) {
+    signingConfigs {
+      create("persistent") {
+        storeFile = file(persistentKeystore)
+        storeType = "PKCS12"
+        storePassword = persistentPassword
+        keyAlias = "gallery"
+        keyPassword = persistentPassword
+      }
+    }
+  }
+
   buildTypes {
+    debug {
+      if (persistentKeystore != null) signingConfig = signingConfigs.getByName("persistent")
+    }
     release {
       isMinifyEnabled = false
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-      signingConfig = signingConfigs.getByName("debug")
+      signingConfig = signingConfigs.getByName(if (persistentKeystore != null) "persistent" else "debug")
     }
   }
   compileOptions {
