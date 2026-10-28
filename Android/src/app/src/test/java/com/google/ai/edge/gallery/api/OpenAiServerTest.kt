@@ -34,8 +34,8 @@ class OpenAiServerTest {
     }
     override fun close() {}
   }
-  private fun request(server: OpenAiServer, path: String, body: String? = null, token: String? = key): Pair<Int,String> {
-    val connection = URL("http://127.0.0.1:${server.port}$path").openConnection() as HttpURLConnection
+  private fun request(server: OpenAiServer, path: String, body: String? = null, token: String? = key, host: String = "127.0.0.1"): Pair<Int,String> {
+    val connection = URL("http://$host:${server.port}$path").openConnection() as HttpURLConnection
     try {
       connection.connectTimeout = 3000; connection.readTimeout = 3000
       token?.let { connection.setRequestProperty("Authorization", "Bearer $it") }
@@ -50,6 +50,30 @@ class OpenAiServerTest {
     } finally { connection.disconnect() }
   }
   private fun body(extra: String = "") = """{"model":"local-test","messages":[{"role":"user","content":"你好"}]$extra}"""
+
+  @Test fun healthProbeIsPublicButContainsNoModelOrKey() {
+    OpenAiServer("127.0.0.1",0,key,FakeBackend()).use { server ->
+      val (status, text) = request(server,"/health",token=null)
+      assertEquals(200,status)
+      assertEquals("ok",JsonParser.parseString(text).asJsonObject["status"].asString)
+      assertFalse(text.contains(key)); assertFalse(text.contains("local-test"))
+      assertEquals(401,request(server,"/v1/models",token=null).first)
+    }
+  }
+
+  @Test fun lanBindingAcceptsConnectionsToNonLoopbackAddress() {
+    val host = java.net.NetworkInterface.getNetworkInterfaces().toList()
+      .filter { it.isUp && !it.isLoopback }
+      .flatMap { it.inetAddresses.toList() }
+      .filterIsInstance<java.net.Inet4Address>()
+      .firstOrNull { it.isSiteLocalAddress }?.hostAddress
+    org.junit.Assume.assumeNotNull(host)
+    OpenAiServer("0.0.0.0",0,key,FakeBackend()).use { server ->
+      assertEquals(200,request(server,"/health",token=null,host=host!!).first)
+      assertEquals(200,request(server,"/v1/models",host=host).first)
+      assertEquals(401,request(server,"/v1/models",token=null,host=host).first)
+    }
+  }
 
   @Test fun modelsRequireAuthentication() {
     OpenAiServer("127.0.0.1",0,key,FakeBackend()).use { server ->

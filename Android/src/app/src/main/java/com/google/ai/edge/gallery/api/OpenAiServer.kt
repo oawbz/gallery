@@ -98,6 +98,11 @@ internal class OpenAiServer(
         if (headers.containsKey(name)) fail(400, "Duplicate header")
         headers[name] = line.substring(colon + 1).trim()
       }
+      // A public liveness probe reveals no model data and helps diagnose LAN reachability.
+      if (requestLine[0] == "GET" && requestLine[1] == "/health") {
+        json(output, 200, mapOf("status" to "ok"))
+        return
+      }
       if (!MessageDigest.isEqual(
           (headers["authorization"] ?: "").toByteArray(), "Bearer $apiKey".toByteArray())) {
         fail(401, "Invalid API key")

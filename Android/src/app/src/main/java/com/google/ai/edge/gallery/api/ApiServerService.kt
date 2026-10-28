@@ -21,8 +21,12 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.Manifest
+import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import com.google.ai.edge.gallery.R
 import com.google.ai.edge.gallery.common.getModelStorageDir
 import java.io.File
@@ -30,7 +34,10 @@ import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.flow.MutableStateFlow
 
-internal data class ApiServerState(val active: Boolean = false, val loading: Boolean = false, val error: Boolean = false)
+internal data class ApiServerState(
+  val active: Boolean = false, val loading: Boolean = false, val error: Boolean = false,
+  val errorResource: Int = R.string.api_error, val lan: Boolean = false, val port: Int = 0,
+)
 
 class ApiServerService : Service() {
   private val worker = Executors.newSingleThreadExecutor()
@@ -42,6 +49,12 @@ class ApiServerService : Service() {
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
     if (intent?.action == STOP) { stopSelf(); return START_NOT_STICKY }
     if (state.value.active || state.value.loading) return START_NOT_STICKY
+    if (Build.VERSION.SDK_INT >= 37 && intent?.getBooleanExtra("lan", false) == true &&
+      ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_LOCAL_NETWORK) != PackageManager.PERMISSION_GRANTED) {
+      state.value = ApiServerState(error = true, errorResource = R.string.api_permission_denied)
+      stopSelf()
+      return START_NOT_STICKY
+    }
     state.value = ApiServerState(loading = true)
     try {
       val manager = getSystemService(NotificationManager::class.java)
@@ -67,7 +80,7 @@ class ApiServerService : Service() {
         backend = LocalModelBackend(file, gpu)
         if (!stopping.get()) {
           server = OpenAiServer(if (lan) "0.0.0.0" else "127.0.0.1", port, key, backend!!)
-          state.value = ApiServerState(active = true)
+          state.value = ApiServerState(active = true, lan = lan, port = server!!.port)
         }
       } catch (_: Exception) {
         if (!stopping.get()) { state.value = ApiServerState(error = true); stopSelf() }
