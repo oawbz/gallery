@@ -139,7 +139,7 @@ fun SettingsDialog(
           )
           // Subtitle.
           Text(
-            "App version: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
+            stringResource(R.string.settings_app_version, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE),
             style = labelSmallNarrow,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.offset(y = (-6).dp),
@@ -151,6 +151,9 @@ fun SettingsDialog(
           verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
           val context = LocalContext.current
+          OutlinedButton(onClick = {
+            context.startActivity(Intent(context, com.google.ai.edge.gallery.api.ApiServerActivity::class.java))
+          }) { Text(stringResource(R.string.api_title)) }
           // Theme switcher.
           Column(modifier = Modifier.fillMaxWidth().semantics(mergeDescendants = true) {}) {
             Text(
@@ -235,7 +238,7 @@ fun SettingsDialog(
             verticalArrangement = Arrangement.spacedBy(4.dp),
           ) {
             Text(
-              "HuggingFace access token",
+              stringResource(R.string.settings_hf_token),
               style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Medium),
             )
             // Show the start of the token.
@@ -247,18 +250,18 @@ fun SettingsDialog(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
               )
               Text(
-                "Expires at: ${dateFormatter.format(Instant.ofEpochMilli(curHfToken.expiresAtMs))}",
+                stringResource(R.string.settings_token_expires, dateFormatter.format(Instant.ofEpochMilli(curHfToken.expiresAtMs))),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
               )
             } else {
               Text(
-                "Not available",
+                stringResource(R.string.settings_token_missing),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
               )
               Text(
-                "The token will be automatically retrieved when a gated model is downloaded",
+                stringResource(R.string.settings_token_hint),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
               )
@@ -271,7 +274,7 @@ fun SettingsDialog(
                 },
                 enabled = curHfToken != null,
               ) {
-                Text("Clear")
+                Text(stringResource(R.string.clear))
               }
               val handleSaveToken = {
                 modelManagerViewModel.saveAccessToken(
@@ -312,7 +315,7 @@ fun SettingsDialog(
                     Box(modifier = Modifier.padding(start = 16.dp).weight(1f)) {
                       if (customHfToken.isEmpty()) {
                         Text(
-                          "Enter token manually",
+                          stringResource(R.string.settings_token_manual),
                           color = MaterialTheme.colorScheme.onSurfaceVariant,
                           style = MaterialTheme.typography.bodySmall,
                         )

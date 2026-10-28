@@ -1,0 +1,72 @@
+name: Build and publish Chinese Android API APK
+
+on:
+  push:
+    branches: [codex/android-zh-openai-api]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-zh-api-release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      RELEASE_TAG: android-zh-api-${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Install Android SDK 37
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk_dir="$RUNNER_TEMP/gallery-android-sdk"
+          archive="$RUNNER_TEMP/android-commandline.zip"
+          curl -fsSL --retry 3 https://dl.google.com/android/repository/commandlinetools-linux-16111833_latest.zip -o "$archive"
+          echo "e025545c62a8e64c7559119566a569fb1dec5f60  $archive" | sha1sum -c -
+          mkdir -p "$sdk_dir/cmdline-tools"
+          unzip -q "$archive" -d "$sdk_dir/cmdline-tools"
+          mv "$sdk_dir/cmdline-tools/cmdline-tools" "$sdk_dir/cmdline-tools/latest"
+          export ANDROID_HOME="$sdk_dir"
+          export ANDROID_SDK_ROOT="$sdk_dir"
+          python3 -c 'print("y\n" * 100)' | "$sdk_dir/cmdline-tools/latest/bin/android" --no-metrics sdk install 'platforms;android-37.0' 'build-tools;36.0.0' platform-tools
+          echo "ANDROID_HOME=$sdk_dir" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$sdk_dir" >> "$GITHUB_ENV"
+      - name: Validate Chinese resources
+        run: python3 tools/check_zh_resources.py
+      - name: Test and build APK
+        working-directory: Android/src
+        run: bash gradlew --no-daemon --max-workers=2 :app:testDebugUnitTest :app:assembleDebug --console=plain
+      - name: Prepare download
+        run: |
+          cp Android/src/app/build/outputs/apk/debug/app-debug.apk gallery-zh-openai-api.apk
+          sha256sum gallery-zh-openai-api.apk > gallery-zh-openai-api.apk.sha256
+      - name: Save build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gallery-zh-openai-api
+          path: |
+            gallery-zh-openai-api.apk
+            gallery-zh-openai-api.apk.sha256
+          compression-level: 0
+      - name: Publish APK release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" --target "$GITHUB_SHA" --prerelease \
+              --title 'Gallery 简体中文 + OpenAI API 服务' --notes-file docs/ANDROID_RELEASE.zh-CN.md
+          fi
+          gh release upload "$RELEASE_TAG" gallery-zh-openai-api.apk gallery-zh-openai-api.apk.sha256 --clobber

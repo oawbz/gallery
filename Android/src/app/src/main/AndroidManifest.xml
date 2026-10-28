@@ -27,6 +27,7 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.READ_CALENDAR" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -58,7 +59,8 @@
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
         android:icon="${appIcon}"
-        android:label="Edge Gallery"
+        android:label="@string/app_name"
+        android:localeConfig="@xml/locales_config"
         android:roundIcon="${appIcon}"
         android:supportsRtl="true"
         android:theme="@style/Theme.Gallery"
@@ -95,6 +97,11 @@
                 <data android:scheme="com.google.ai.edge.gallery" />
             </intent-filter>
         </activity>
+
+        <activity android:name=".api.ApiServerActivity" android:exported="false" />
+        <service android:name=".api.ApiServerService" android:exported="false" android:foregroundServiceType="specialUse">
+            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="User-started local LLM HTTP inference server for OpenAI-compatible clients; stopped from the app or notification." />
+        </service>
 
         <!-- Set themes for activities that are used for viewing open source licenses -->
         <activity

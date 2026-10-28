@@ -492,7 +492,7 @@ fun GlobalModelManager(
           modifier = Modifier.fillMaxWidth().padding(16.dp),
         ) {
           Icon(Icons.AutoMirrored.Outlined.NoteAdd, contentDescription = null)
-          Text("From local model file", modifier = Modifier.clearAndSetSemantics {})
+          Text(stringResource(R.string.settings_import_local), modifier = Modifier.clearAndSetSemantics {})
         }
       }
       val cdImportFromHuggingFace = stringResource(R.string.cd_import_model_from_hugging_face)

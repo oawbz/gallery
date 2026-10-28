@@ -36,15 +36,15 @@
   <string name="app_name" translatable="false">Google AI Edge Gallery</string>
   <string name="app_name_first_part" translatable="false">Google AI</string>
   <string name="app_name_second_part" translatable="false">Edge Gallery</string>
-  <string name="askimage_emptystate_title" translatable="false">Ask Image</string>
+  <string name="askimage_emptystate_title" translatable="true">Ask Image</string>
   <string name="askimage_emptystate_content" translatable="true" description="Instructions shown when starting a chat with image input, explaining how to add images (up to 10). [CHAR_LIMIT=203]">To get started, tap the + below to add an image (max 10 images per chat) and type a prompt to ask a question about it!</string>
   <string name="askimage_emptystate_content_aicore" translatable="true" description="Instructions shown when starting a chat with image input for AICore models, explaining how to add a single image. [CHAR_LIMIT=200]">To get started, tap the + below to add an image (max 1 image per chat) and type a prompt to ask a question about it!</string>
-  <string name="askaudio_emptystate_title" translatable="false">Audio Scribe</string>
+  <string name="askaudio_emptystate_title" translatable="true">Audio Scribe</string>
   <string name="askaudio_emptystate_content" translatable="true" description="Instructions shown when starting a chat with audio input, explaining how to add a clip. [CHAR_LIMIT=234]">To get started, tap the + below to add a audio clip (limited to 1 clip up to 30 seconds) and type a prompt to transcribe or translate it!</string>
   <string name="gallery_news_notification_title" translatable="true" description="Default title for push notifications about gallery news. [CHAR_LIMIT=26]">Gallery News</string>
   <string name="baseline" translatable="true" description="Label for a button or chip to set a benchmark run as the comparison baseline. [CHAR_LIMIT=18]">Baseline</string>
   <string name="basic_info" translatable="true" description="Header for a section showing basic information about a benchmark run. [CHAR_LIMIT=26]">Basic info</string>
-  <string name="benchmark" translatable="false">Benchmark</string>
+  <string name="benchmark" translatable="true">Benchmark</string>
   <string name="benchmark_comparison_help_title" translatable="true" description="Title of the help dialog explaining benchmark comparisons. [CHAR_LIMIT=45]">How to compare benchmark runs</string>
   <string name="benchmark_comparison_help_content" translatable="true" description="Detailed instructions on how to compare benchmark results. [CHAR_LIMIT=369]">Compare benchmark runs by tapping the **Baseline** chip on any run result card to set the run as the comparison baseline. We\'ll automatically calculate and display the percentage differences in **all other** run result cards.</string>
   <string name="benchmark_model" translatable="true" description="Title of the screen where users configure and run benchmarks. [CHAR_LIMIT=17]">Benchmark model</string>
@@ -84,9 +84,9 @@
   <string name="color" translatable="true" description="Label for color picker or color configuration. [CHAR_LIMIT=18]">Color</string>
   <string name="config_dialog_tab_basic" translatable="true" description="Tab label for basic model configurations. [CHAR_LIMIT=12]">Basic</string>
   <string name="config_dialog_tab_advanced" translatable="true" description="Tab label for advanced model configurations. [CHAR_LIMIT=15]">Advanced</string>
-  <string name="config_dialog_tab_model_configs" translatable="false" description="Tab label for model-specific configurations. [CHAR_LIMIT=22]">Model configs</string>
+  <string name="config_dialog_tab_model_configs" translatable="true" description="Tab label for model-specific configurations. [CHAR_LIMIT=22]">Model configs</string>
   <string name="config_dialog_tab_system_prompt" translatable="true" description="Tab label for system prompt configuration. [CHAR_LIMIT=22]">System prompt</string>
-  <string name="config_dialog_title" translatable="false" description="Title of the settings/configuration dialog. [CHAR_LIMIT=26]">Configurations</string>
+  <string name="config_dialog_title" translatable="true" description="Title of the settings/configuration dialog. [CHAR_LIMIT=26]">Configurations</string>
   <string name="benchmark_config_dialog_title" translatable="true" description="Title of the benchmark configuration dialog. [CHAR_LIMIT=29]">Benchmark configs</string>
   <string name="start" translatable="true" description="Button label to start benchmarking. [CHAR_LIMIT=9]">Start</string>
   <string name="continue_button_label" translatable="true" description="Button label to proceed to next step. [CHAR_LIMIT=18]">Continue</string>
@@ -223,11 +223,11 @@
   <string name="set_timer_message" translatable="true" description="Status message indicating the app is setting a timer for a specific number of seconds. [CHAR_LIMIT=110]">Setting the timer for %1$d seconds.</string>
   <string name="add_calendar_event_message" translatable="true" description="Status message confirming a calendar event is being added. [CHAR_LIMIT=110]">Adding \"Team meeting (10AM-11AM)\" to your calendar.</string>
   <string name="take_picture_message" translatable="true" description="Status message confirming the camera app is being opened. [CHAR_LIMIT=45]">Opening the camera app.</string>
-  <string name="mobile_actions_title" translatable="false">Mobile Actions</string>
+  <string name="mobile_actions_title" translatable="true">Mobile Actions</string>
   <string name="mobile_actions_description" translatable="true" description="Subtitle/description of the Mobile Actions feature, explaining users can control the device. [CHAR_LIMIT=44]">Control your device with simple commands</string>
   <string name="mobile_actions_supported_actions" translatable="true" description="Header for the list of sample commands supported by the mobile actions model. [CHAR_LIMIT=30]">Supported sample actions:</string>
-  <string name="mobile_actions_tab_model_response" translatable="false">Model response</string>
-  <string name="mobile_actions_tab_function_called" translatable="false">Function(s) called</string>
+  <string name="mobile_actions_tab_model_response" translatable="true">Model response</string>
+  <string name="mobile_actions_tab_function_called" translatable="true">Function(s) called</string>
   <string name="update" translatable="true" description="Button label to update a model to a newer version. [CHAR_LIMIT=18]">Update</string>
   <string name="update_available" translatable="true" description="Label indicating a new version of the model is available. [CHAR_LIMIT=20]">Update available</string>
   <string name="view_results" translatable="true" description="Button label to navigate to the benchmark results viewer. [CHAR_LIMIT=12]">View results</string>
@@ -348,7 +348,7 @@
   <string name="vertical" translatable="true" description="This string appears within the Scrapbook grid maker as a layout option within the grid generator. It means vertical orientation. [CHAR_LIMIT=30]">Vertical</string>
 
   <!-- Strings for skills -->
-  <string name="aichat_emptystate_title" translatable="false">AI Chat</string>
+  <string name="aichat_emptystate_title" translatable="true">AI Chat</string>
   <string name="aichat_emptystate_content" translatable="true" description="Description text shown on the empty state screen of the AI Chat feature, explaining what it does. [CHAR_LIMIT=110]">Chat with on-device large language models.</string>
   <string name="aichat_emptystate_support_image_audio" translatable="true" description="Description text shown on the empty state screen of the AI Chat feature, explaining the multimodal limits. [CHAR_LIMIT=112]">Support up to 10 images per chat and 1 audio clip up to 30 seconds.</string>
   <string name="aichat_emptystate_support_image_aicore_audio" translatable="true" description="Description text shown on the empty state screen of the AI Chat feature, explaining the multimodal limits. [CHAR_LIMIT=100]">Support 1 image per chat and 1 audio clip up to 30 seconds.</string>
@@ -372,7 +372,7 @@
   <string name="add_skill_dialog_title_from_local_import" translatable="true" description="Title of the dialog for importing a skill from the device's local storage. [CHAR_LIMIT=31]">Import local skill</string>
   <string name="add_skill_dialog_subtitle_from_local_import" translatable="true" description="Instructions for developers on how to prepare the skill directory on the device before importing it. [CHAR_LIMIT=118]">Please first \"adb push\" the whole skill directory to /sdcard/Download</string>
   <string name="add_skill_manual_input_sheet_title" translatable="true" description="Title of the bottom sheet when the user is creating a new skill manually. [CHAR_LIMIT=26]">Create a skill</string>
-  <string name="agent_skills" translatable="false">Agent Skills</string>
+  <string name="agent_skills" translatable="true">Agent Skills</string>
   <string name="disclaimer_dialog_content" translatable="true" description="Disclaimer warning users about the risks of using third-party skills. [CHAR_LIMIT=544]">Third-party skills are not authored or endorsed by Google. Google is not responsible for their contents, security, or data handling practices.\n\nPlease exercise caution before providing sensitive information, such as personal identification, tokens, or API keys.\n\nAny use of an Agent Skill is subject to the applicable terms for that Skill.</string>
   <string name="disclaimer_dialog_title" translatable="true" description="Title of the disclaimer dialog shown when adding a third-party skill. [CHAR_LIMIT=35]">Add third-party skill</string>
   <string name="disclaimer_dialog_agree" translatable="true" description="Button label to agree to the disclaimer terms and proceed. [CHAR_LIMIT=15]">Agree</string>
@@ -756,73 +756,73 @@
 
   <!-- Config Labels -->
   <!-- Label for the 'Max tokens' option in the model configuration dialog. -->
-  <string name="config_label_max_tokens" translatable="false">Max tokens</string>
+  <string name="config_label_max_tokens" translatable="true">Max tokens</string>
   <!-- Label for the 'Max output tokens' option in the model configuration dialog. -->
-  <string name="config_label_max_output_tokens" translatable="false">Max output tokens</string>
+  <string name="config_label_max_output_tokens" translatable="true">Max output tokens</string>
   <!-- Label for the 'TopK' option in the model configuration dialog. -->
-  <string name="config_label_topk" translatable="false">TopK</string>
+  <string name="config_label_topk" translatable="true">TopK</string>
   <!-- Label for the 'TopP' option in the model configuration dialog. -->
-  <string name="config_label_topp" translatable="false">TopP</string>
+  <string name="config_label_topp" translatable="true">TopP</string>
   <!-- Label for the 'Temperature' option in the model configuration dialog. -->
-  <string name="config_label_temperature" translatable="false">Temperature</string>
+  <string name="config_label_temperature" translatable="true">Temperature</string>
   <!-- Label for the 'Default max tokens' option in the model configuration dialog. -->
-  <string name="config_label_default_max_tokens" translatable="false">Default max tokens</string>
+  <string name="config_label_default_max_tokens" translatable="true">Default max tokens</string>
   <!-- Label for the 'Default TopK' option in the model configuration dialog. -->
-  <string name="config_label_default_topk" translatable="false">Default TopK</string>
+  <string name="config_label_default_topk" translatable="true">Default TopK</string>
   <!-- Label for the 'Default TopP' option in the model configuration dialog. -->
-  <string name="config_label_default_topp" translatable="false">Default TopP</string>
+  <string name="config_label_default_topp" translatable="true">Default TopP</string>
   <!-- Label for the 'Default temperature' option in the model configuration dialog. -->
-  <string name="config_label_default_temperature" translatable="false">Default temperature</string>
+  <string name="config_label_default_temperature" translatable="true">Default temperature</string>
   <!-- Label for the 'Support image' option in the model configuration dialog. -->
-  <string name="config_label_support_image" translatable="false">Support image</string>
+  <string name="config_label_support_image" translatable="true">Support image</string>
   <!-- Label for the 'Support audio' option in the model configuration dialog. -->
-  <string name="config_label_support_audio" translatable="false">Support audio</string>
+  <string name="config_label_support_audio" translatable="true">Support audio</string>
   <!-- Label for the 'Support tiny garden' option in the model configuration dialog. -->
-  <string name="config_label_support_tiny_garden" translatable="false">Support tiny garden</string>
+  <string name="config_label_support_tiny_garden" translatable="true">Support tiny garden</string>
   <!-- Label for the 'Support mobile actions' option in the model configuration dialog. -->
-  <string name="config_label_support_mobile_actions" translatable="false">Support mobile actions</string>
+  <string name="config_label_support_mobile_actions" translatable="true">Support mobile actions</string>
   <!-- Label for the 'Support thinking' option in the model configuration dialog. -->
-  <string name="config_label_support_thinking" translatable="false">Support thinking</string>
+  <string name="config_label_support_thinking" translatable="true">Support thinking</string>
   <!-- Label for the 'Support speculative decoding' option in the model configuration dialog. -->
-  <string name="config_label_support_speculative_decoding" translatable="false">Support speculative decoding</string>
+  <string name="config_label_support_speculative_decoding" translatable="true">Support speculative decoding</string>
   <!-- Label for the 'Enable thinking' option in the model configuration dialog. -->
-  <string name="config_label_enable_thinking" translatable="false">Enable thinking</string>
+  <string name="config_label_enable_thinking" translatable="true">Enable thinking</string>
   <!-- Label for the 'Enable speculative decoding' option in the model configuration dialog. -->
-  <string name="config_label_enable_speculative_decoding" translatable="false">Enable speculative decoding</string>
+  <string name="config_label_enable_speculative_decoding" translatable="true">Enable speculative decoding</string>
   <!-- Label for the 'Enable context compression' option in the model configuration dialog. -->
   <string name="config_label_enable_context_compression" translatable="true" description="This string appears as a switch label in the model configuration dialog, allowing the user to toggle automatic conversation context compression when approaching the token limit. [CHAR_LIMIT=45]">Automatically compress context</string>
   <!-- Description for the 'Automatically compress context' option in the model configuration dialog. -->
   <string name="config_desc_enable_context_compression" translatable="true" description="This string appears as helper text below the 'Automatically compress context' switch in the model configuration dialog, explaining that the chat context will be automatically compressed when approaching the token limit. [CHAR_LIMIT=160]">When a chat approaches the token limit, automatically compress the chat context so I can keep chatting.</string>
   <!-- Label for the 'Max result count' option in the model configuration dialog. -->
-  <string name="config_label_max_result_count" translatable="false">Max result count</string>
+  <string name="config_label_max_result_count" translatable="true">Max result count</string>
   <!-- Label for the 'Use GPU' option in the model configuration dialog. -->
-  <string name="config_label_use_gpu" translatable="false">Use GPU</string>
+  <string name="config_label_use_gpu" translatable="true">Use GPU</string>
   <!-- Label for the 'Accelerator' option in the model configuration dialog. -->
-  <string name="config_label_accelerator" translatable="false">Accelerator</string>
+  <string name="config_label_accelerator" translatable="true">Accelerator</string>
   <!-- Label for the 'Vision accelerator' option in the model configuration dialog. -->
-  <string name="config_label_vision_accelerator" translatable="false">Vision accelerator</string>
+  <string name="config_label_vision_accelerator" translatable="true">Vision accelerator</string>
   <!-- Label for the 'Visual token budget' dropdown option in the model configuration dialog. -->
-  <string name="config_label_visual_token_budget" translatable="false">Visual token budget</string>
+  <string name="config_label_visual_token_budget" translatable="true">Visual token budget</string>
   <!-- Label for the 'Compatible accelerators' option in the model configuration dialog. -->
-  <string name="config_label_compatible_accelerators" translatable="false">Compatible accelerators</string>
+  <string name="config_label_compatible_accelerators" translatable="true">Compatible accelerators</string>
   <!-- Label for the 'Warm up iterations' option in the model configuration dialog. -->
-  <string name="config_label_warm_up_iterations" translatable="false">Warm up iterations</string>
+  <string name="config_label_warm_up_iterations" translatable="true">Warm up iterations</string>
   <!-- Label for the 'Benchmark iterations' option in the model configuration dialog. -->
-  <string name="config_label_benchmark_iterations" translatable="false">Benchmark iterations</string>
+  <string name="config_label_benchmark_iterations" translatable="true">Benchmark iterations</string>
   <!-- Label for the 'Iterations' option in the model configuration dialog. -->
-  <string name="config_label_iterations" translatable="false">Iterations</string>
+  <string name="config_label_iterations" translatable="true">Iterations</string>
   <!-- Label for the 'Model type' option in the model configuration dialog. -->
-  <string name="config_label_model_type" translatable="false">Model type</string>
+  <string name="config_label_model_type" translatable="true">Model type</string>
   <!-- Label for the 'Model' option in the model configuration dialog. -->
-  <string name="config_label_model" translatable="false">Model</string>
+  <string name="config_label_model" translatable="true">Model</string>
   <!-- Label for the 'Number of turns before the conversation resets' option in the model configuration dialog. -->
-  <string name="config_label_reset_conversation_turn_count" translatable="false">Number of turns before the conversation resets</string>
+  <string name="config_label_reset_conversation_turn_count" translatable="true">Number of turns before the conversation resets</string>
   <!-- Label for the 'Prefill tokens' option in the model configuration dialog. -->
-  <string name="config_label_prefill_tokens" translatable="false">Prefill tokens</string>
+  <string name="config_label_prefill_tokens" translatable="true">Prefill tokens</string>
   <!-- Label for the 'Decode tokens' option in the model configuration dialog. -->
-  <string name="config_label_decode_tokens" translatable="false">Decode tokens</string>
+  <string name="config_label_decode_tokens" translatable="true">Decode tokens</string>
   <!-- Label for the 'Number of runs' option in the model configuration dialog. -->
-  <string name="config_label_number_of_runs" translatable="false">Number of runs</string>
+  <string name="config_label_number_of_runs" translatable="true">Number of runs</string>
   <!-- Label indicating statistics on a specific accelerator. %1$s is the accelerator name. -->
   <string name="stats_on_accelerator" translatable="true" description="Label for the section displaying performance statistics on a specific hardware accelerator (e.g., 'Stats on GPU'). [CHAR_LIMIT=22]">Stats on %1$s</string>
   <!-- First part of Gemma 4 introduction text. -->
@@ -831,11 +831,11 @@
   <string name="gemma4_intro_part_2" translatable="true" description="Second part of the introductory text, connecting the LiteRT community link and the Gemma 4 link. [CHAR_LIMIT=40]">, featuring the all-new </string>
   <string name="gemma4_label" translatable="false">Gemma 4</string>
   <!-- Label for the 'Show 3D spinner during image gen' option in the model configuration dialog. -->
-  <string name="config_label_show_3d_spinner" translatable="false">Show 3D spinner during image gen</string>
+  <string name="config_label_show_3d_spinner" translatable="true">Show 3D spinner during image gen</string>
   <!-- Label for the 'Font size' option in the model configuration dialog. -->
-  <string name="config_label_font_size" translatable="false">Font size</string>
+  <string name="config_label_font_size" translatable="true">Font size</string>
   <!-- Label for the 'Max character count' option in the model configuration dialog. -->
-  <string name="config_label_max_char_count" translatable="false">Max character count</string>
+  <string name="config_label_max_char_count" translatable="true">Max character count</string>
   <string name="new_badge" translatable="true" description="Badge label indicating a new feature. [CHAR_LIMIT=8]">New</string>
   <!-- Home Screen Promos -->
   <string name="gemma_reskin_try_gemma_4_chat" translatable="true" description="Promo card description to try Gemma 4 chat. [CHAR_LIMIT=65]">Chat with the latest Gemma 4 model today</string>
@@ -902,12 +902,12 @@
   <string name="explore_other_use_cases" translatable="true" description="Section header for other use cases. [CHAR_LIMIT=30]">Explore other use cases</string>
 
   <!-- Task Labels & Descriptions -->
-  <string name="task_label_ai_chat" translatable="false">AI Chat</string>
-  <string name="task_label_prompt_lab" translatable="false">Prompt Lab</string>
-  <string name="task_label_ask_image" translatable="false">Ask Image</string>
-  <string name="task_label_audio_scribe" translatable="false">Audio Scribe</string>
-  <string name="task_label_tiny_garden" translatable="false">Tiny Garden</string>
-  <string name="task_label_agent_skills" translatable="false">Agent Skills</string>
+  <string name="task_label_ai_chat" translatable="true">AI Chat</string>
+  <string name="task_label_prompt_lab" translatable="true">Prompt Lab</string>
+  <string name="task_label_ask_image" translatable="true">Ask Image</string>
+  <string name="task_label_audio_scribe" translatable="true">Audio Scribe</string>
+  <string name="task_label_tiny_garden" translatable="true">Tiny Garden</string>
+  <string name="task_label_agent_skills" translatable="true">Agent Skills</string>
   <!-- Description for the AI Chat task. [CHAR_LIMIT=100] -->
   <string name="task_desc_ai_chat" translatable="true" description="Description for the AI Chat task. [CHAR_LIMIT=90]">Chat with on-device large language models</string>
   <!-- Short description for the AI Chat task. [CHAR_LIMIT=35] -->
@@ -941,7 +941,7 @@
   <string name="download_extra_data_notification_title_fail" translatable="true" description="Title of system notification when an extra data file download fails. [CHAR_LIMIT=35]">Extra data file download failed</string>
   <!-- Notification content when an extra data file download fails, where %1$s is the component label. [CHAR_LIMIT=60] -->
   <string name="download_extra_data_notification_content_fail" translatable="true" description="Content of system notification when an extra data file download fails, where %1$s is the component label. [CHAR_LIMIT=60]">Failed to download extra data file \'%1$s\'</string>
-  <string name="task_label_smart_album" translatable="false">Instant Media Search</string>
+  <string name="task_label_smart_album" translatable="true">Instant Media Search</string>
   <!-- Description for the Smart Album task. [CHAR_LIMIT=100] -->
   <string name="task_desc_smart_album" translatable="true" description="Description for the Smart Album task. [CHAR_LIMIT=97]">Organize and search your photos and videos locally with EmbeddingGemma 2</string>
   <!-- Short description for the Smart Album task. [CHAR_LIMIT=35] -->
@@ -1232,7 +1232,7 @@
   <string name="task_desc_video_moment_finder" translatable="true" description="Description of the Video Moment Finder task, shown on the task detail page; EmbeddingGemma 2 is a model name and should not be translated.">Search for moments in videos using natural language with EmbeddingGemma 2</string>
   <string name="task_short_desc_video_moment_finder" translatable="true" description="One-line subtitle shown under the Video Moment Finder task title on the home screen task card.">Search for moments in videos</string>
   <!-- Name of the Video Moment Finder feature; intentionally not translated. -->
-  <string name="videomomentfinder_feature_name" translatable="false">Video Moment Finder</string>
+  <string name="videomomentfinder_feature_name" translatable="true">Video Moment Finder</string>
   <string name="videomomentfinder_project_list_empty_description" translatable="true" description="Body text of the empty state shown before any video has been added, explaining what the feature does; EmbeddingGemma 2 is a model name and should not be translated.">Search for moments in videos using natural language with EmbeddingGemma 2</string>
   <string name="videomomentfinder_add_video_button" translatable="true" description="Label on the button in the empty state that opens the photo picker so the user can add a first video.">Add a video</string>
   <string name="videomomentfinder_add_another_video" translatable="true" description="Label and accessibility description of the tile that lets the user add one more video to the grid of videos.">Add another video</string>

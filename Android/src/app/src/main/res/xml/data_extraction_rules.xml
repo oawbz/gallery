@@ -19,11 +19,15 @@
 -->
 <data-extraction-rules>
     <cloud-backup>
+        <exclude domain="sharedpref" path="api_server.xml"/>
         <!-- TODO: Use <include> and <exclude> to control what is backed up.
         <include .../>
         <exclude .../>
         -->
     </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="api_server.xml"/>
+    </device-transfer>
     <!--
     <device-transfer>
         <include .../>
