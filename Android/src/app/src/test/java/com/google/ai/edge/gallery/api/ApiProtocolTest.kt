@@ -83,6 +83,7 @@ class ApiProtocolTest {
     assertEquals("hello", String(decodeDataImage(data)))
     val remote = parse("""{"role":"user","content":[{"type":"image_url","image_url":{"url":"https://example.com/image.png"}}]}""")
     assertTrue(remote.messages.single().parts.single() is ApiPart.Image)
+    assertTrue(parse("""{"role":"user","content":[{"type":"image_url","image_url":{"url":"http://192.168.1.2/image.png"}}]}""").messages.single().parts.single() is ApiPart.Image)
   }
 
   @Test fun invalidImagesAndNonUserImagesAreRejected() {

@@ -13,17 +13,31 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.google.ai.edge.gallery.api
 
-import java.net.InetAddress
-import java.net.ServerSocket
-import java.util.concurrent.Executors
-import java.util.concurrent.TimeUnit
+import java.io.ByteArrayInputStream
+import java.net.HttpURLConnection
+import java.net.URL
 import org.junit.Assert.*
 import org.junit.Test
 
 class ApiImagesTest {
+  private class ImageConnection(
+    private val status: Int = 200,
+    private val length: Long = 5,
+    private val location: String? = null,
+    private val bytes: ByteArray = "hello".toByteArray(),
+  ) : HttpURLConnection(URL("https://images.example/image")) {
+    var disconnected = false
+    override fun connect() {}
+    override fun disconnect() { disconnected = true }
+    override fun usingProxy() = false
+    override fun getResponseCode() = status
+    override fun getContentLengthLong() = length
+    override fun getHeaderField(name: String?) = if (name == "Location") location else null
+    override fun getInputStream() = ByteArrayInputStream(bytes)
+  }
+
   @Test fun inlineImageBytesReachDecoderAndRespectAggregateBudget() {
     var decoded = 0
     val loader = ApiImages { decoded++; it }
@@ -36,42 +50,45 @@ class ApiImagesTest {
     assertEquals(2,decoded)
   }
 
-  @Test fun httpImageDownloadsAreBoundedAndDoNotSendApiCredentials() {
-    ServerSocket(0,1,InetAddress.getByName("127.0.0.1")).use { server ->
-      val executor = Executors.newSingleThreadExecutor()
+  @Test fun httpsImageDownloadsSetLimitsAndDoNotSendApiCredentials() {
+    val connection = ImageConnection()
+    val loader = ApiImages(connect = { connection }) { it }
+    assertArrayEquals("hello".toByteArray(),loader.load("https://images.example/image"))
+    assertFalse(connection.instanceFollowRedirects)
+    assertEquals(10_000,connection.connectTimeout)
+    assertEquals(10_000,connection.readTimeout)
+    assertFalse(connection.requestProperties.keys.any { it.equals("Authorization",true) })
+    assertTrue(connection.disconnected)
+  }
+
+  @Test fun declaredAndUndeclaredOversizedDownloadsAreRejectedBeforeDecode() {
+    for (connection in listOf(ImageConnection(length = MAX_IMAGE_BYTES + 1L),
+        ImageConnection(length = -1, bytes = ByteArray(MAX_IMAGE_BYTES + 1)))) {
       try {
-        val headers = executor.submit<String> {
-          server.accept().use { socket ->
-            socket.soTimeout = 3000
-            val reader = socket.getInputStream().bufferedReader()
-            val lines = mutableListOf<String>()
-            while (true) { val line = reader.readLine() ?: break; if (line.isEmpty()) break; lines.add(line) }
-            socket.getOutputStream().write("HTTP/1.1 200 OK\r\nContent-Length: 5\r\nConnection: close\r\n\r\nhello".toByteArray())
-            lines.joinToString("\n")
-          }
-        }
-        assertArrayEquals("hello".toByteArray(),ApiImages { it }.load("http://127.0.0.1:${server.localPort}/image"))
-        assertFalse(headers.get(3,TimeUnit.SECONDS).contains("Authorization",ignoreCase = true))
-      } finally { executor.shutdownNow() }
+        ApiImages(connect = { connection }, normalize = { error("Must not decode") }).load("https://images.example/image")
+        fail("Expected limit")
+      } catch (e: ApiFailure) { assertEquals(413,e.status) }
+      assertTrue(connection.disconnected)
     }
   }
 
-  @Test fun declaredOversizedDownloadIsRejectedBeforeDecode() {
-    ServerSocket(0,1,InetAddress.getByName("127.0.0.1")).use { server ->
-      val executor = Executors.newSingleThreadExecutor()
-      try {
-        val sent = executor.submit {
-          server.accept().use { socket ->
-            socket.soTimeout = 3000
-            val reader = socket.getInputStream().bufferedReader()
-            while (!reader.readLine().isNullOrEmpty()) { }
-            socket.getOutputStream().write("HTTP/1.1 200 OK\r\nContent-Length: ${MAX_IMAGE_BYTES + 1}\r\nConnection: close\r\n\r\n".toByteArray())
-          }
-        }
-        try { ApiImages { error("Must not decode") }.load("http://127.0.0.1:${server.localPort}/image"); fail("Expected limit") }
-        catch (e: ApiFailure) { assertEquals(413,e.status) }
-        sent.get(3,TimeUnit.SECONDS)
-      } finally { executor.shutdownNow() }
-    }
+  @Test fun httpsRedirectsCannotDowngradeToCleartext() {
+    var connections = 0
+    val connection = ImageConnection(status = 302, location = "http://images.example/image")
+    try {
+      ApiImages(connect = { connections++; connection }) { it }.load("https://images.example/image")
+      fail("Expected HTTPS-only policy")
+    } catch (e: ApiFailure) { assertEquals(400,e.status) }
+    assertEquals(1,connections)
+    assertTrue(connection.disconnected)
   }
+  @Test fun explicitlyProvidedHttpImageUrlsAreAccepted() {
+    val connection = ImageConnection()
+    var requested = ""
+    val loader = ApiImages(connect = { requested = it.toString(); connection }) { it }
+    assertArrayEquals("hello".toByteArray(),loader.load("http://192.168.1.2/image.png"))
+    assertEquals("http://192.168.1.2/image.png",requested)
+    assertTrue(connection.disconnected)
+  }
+
 }

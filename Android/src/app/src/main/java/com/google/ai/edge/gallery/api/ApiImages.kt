@@ -23,7 +23,10 @@ import java.net.HttpURLConnection
 import java.net.URI
 
 /** Request-scoped, bounded downloads. Never forwards the API bearer key to image hosts. */
-internal class ApiImages(private val normalize: (ByteArray) -> ByteArray = ::normalizeImage) {
+internal class ApiImages(
+  private val connect: (URI) -> HttpURLConnection = { it.toURL().openConnection() as HttpURLConnection },
+  private val normalize: (ByteArray) -> ByteArray = ::normalizeImage,
+) {
   private var total = 0
   fun load(url: String): ByteArray {
     val bytes = if (url.startsWith("data:")) decodeDataImage(url) else download(url)
@@ -37,8 +40,8 @@ internal class ApiImages(private val normalize: (ByteArray) -> ByteArray = ::nor
     val deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(30)
     repeat(4) {
       val uri = URI(url)
-      if (uri.scheme !in setOf("http", "https") || uri.host.isNullOrEmpty() || uri.userInfo != null) invalid("Invalid image URL")
-      val connection = uri.toURL().openConnection() as HttpURLConnection
+      if (uri.scheme !in setOf("http", "https") || uri.host.isNullOrEmpty() || uri.userInfo != null) invalid("Use an HTTP(S) image URL or Base64 data URL")
+      val connection = connect(uri)
       try {
         connection.instanceFollowRedirects = false
         connection.connectTimeout = 10_000; connection.readTimeout = 10_000
@@ -46,7 +49,9 @@ internal class ApiImages(private val normalize: (ByteArray) -> ByteArray = ::nor
         val status = connection.responseCode
         if (status in setOf(301, 302, 303, 307, 308)) {
           val location = connection.getHeaderField("Location") ?: invalid("Image redirect has no location")
-          url = uri.resolve(location).toString()
+          val next = uri.resolve(location)
+          if (uri.scheme == "https" && next.scheme == "http") invalid("HTTPS image redirects cannot downgrade to HTTP; provide an HTTP URL explicitly if intended")
+          url = next.toString()
           if (System.nanoTime() > deadline) throw ApiFailure(422, "Image download timed out")
         } else {
           if (status != 200) throw ApiFailure(422, "Image server did not return HTTP 200")
