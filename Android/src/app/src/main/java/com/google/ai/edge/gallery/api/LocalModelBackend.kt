@@ -23,6 +23,9 @@ import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
 import com.google.ai.edge.litertlm.Message
 import com.google.ai.edge.litertlm.MessageCallback
+import com.google.ai.edge.litertlm.ModelInfo
+import com.google.ai.edge.litertlm.Modality
+import com.google.ai.edge.litertlm.BackendType
 import com.google.ai.edge.litertlm.SamplerConfig
 import java.io.File
 import java.util.concurrent.CountDownLatch
@@ -33,35 +36,60 @@ import java.util.concurrent.atomic.AtomicReference
 /** Owns a separate engine; API conversations never mutate Gallery chat history. */
 internal class LocalModelBackend(file: File, gpu: Boolean) : ChatBackend {
   override val modelId = file.nameWithoutExtension
+  private val capabilities = ModelInfo.from(file.absolutePath).use { info ->
+    Triple(info.inputModalities().vision, (info as? ModelInfo.Llm)?.supportsFunctionCalling() == true,
+      if (info.inputModalities().vision) info.supportedBackends(Modality.VISION) else emptyList())
+  }
   private val engine = Engine(EngineConfig(
     modelPath = file.absolutePath, backend = if (gpu) Backend.GPU() else Backend.CPU(),
+    visionBackend = if (!capabilities.first) null else when {
+      BackendType.GPU in capabilities.third -> Backend.GPU()
+      BackendType.CPU in capabilities.third -> Backend.CPU()
+      else -> throw IllegalArgumentException("No supported vision backend")
+    },
+    maxNumImages = if (capabilities.first) MAX_IMAGES else null,
     maxNumTokens = 4096,
   ))
   init {
     try { engine.initialize() } catch (e: Exception) { engine.close(); throw e }
   }
 
-  @Synchronized
-  override fun generate(request: ChatRequest, emit: (String) -> Unit) {
-    val system = request.messages.firstOrNull()?.takeIf { it.role == "system" }
-    val turns = request.messages.filter { it.role != "system" }
-    val history = turns.dropLast(1).map {
-      if (it.role == "user") Message.user(it.content) else Message.model(it.content)
+  override fun validate(request: ChatRequest) {
+    if (request.messages.any { m -> m.parts.any { it is ApiPart.Image } } && !capabilities.first) {
+      throw ApiFailure(400, "Selected model does not support images")
     }
+    if ((request.activeTools.isNotEmpty() || request.messages.any { it.toolCalls.isNotEmpty() }) && !capabilities.second) {
+      throw ApiFailure(400, "Selected model does not support tool calling")
+    }
+  }
+
+  @Synchronized
+  override fun generate(request: ChatRequest, emit: (ApiDelta) -> Unit) {
+    validate(request)
+    val images = ApiImages()
+    val messages = LiteRtProtocol.messages(request, images::load)
+    val system = messages.firstOrNull()?.takeIf { request.messages.first().role == "system" }
+    val turns = messages.drop(if (system != null) 1 else 0)
+    val toolInstruction = if (request.toolChoice == "required") {
+      "You must call ${request.selectedTool ?: "one of the provided tools"} for this turn."
+    } else ""
     engine.createConversation(ConversationConfig(
-      systemInstruction = system?.let { Contents.of(it.content) }, initialMessages = history,
+      systemInstruction = if (system != null || toolInstruction.isNotEmpty())
+        Contents.of(listOfNotNull(system?.toString(), toolInstruction.takeIf { it.isNotEmpty() }).joinToString("\n")) else null,
+      initialMessages = turns.dropLast(1),
+      tools = LiteRtProtocol.tools(request), automaticToolCalling = false,
       samplerConfig = SamplerConfig(topK = 40, topP = request.topP, temperature = request.temperature),
       maxOutputToken = request.maxTokens ?: 512,
     )).use { conversation ->
-      val chunks = LinkedBlockingQueue<String>(256)
+      val chunks = LinkedBlockingQueue<ApiDelta>(256)
       val done = CountDownLatch(1)
       val error = AtomicReference<Throwable?>()
       var submitted = false
       try {
-        conversation.sendMessageAsync(turns.last().content, object : MessageCallback {
+        conversation.sendMessageAsync(turns.last(), object : MessageCallback {
           override fun onMessage(message: Message) {
-            if (!chunks.offer(message.toString())) {
-              error.compareAndSet(null, IllegalStateException("Client is too slow"))
+            LiteRtProtocol.deltas(message).forEach { delta ->
+              if (!chunks.offer(delta)) error.compareAndSet(null, IllegalStateException("Client is too slow"))
             }
           }
           override fun onDone() { done.countDown() }

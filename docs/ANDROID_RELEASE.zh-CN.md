@@ -1,4 +1,8 @@
-简体中文界面与 Android 本地 OpenAI 兼容 API 服务测试版，版本 1.0.20-lan2。
+简体中文界面与 Android 本地 OpenAI 兼容 API 服务测试版，版本 1.0.20-api3。
+
+本版为 OpenAI 兼容 API 增加图片和工具调用。`content` 可包含 `text`、`image_url`；图片可使用 Base64 data URL 或 HTTP(S) 地址，支持 PNG、JPEG、WebP。工具调用使用原生 LiteRT-LM 接口，支持 `tools`、`tool_choice`、`parallel_tool_calls`、结构化 `tool_calls`、工具结果回传及 SSE；工具由客户端执行，App 不执行客户端声明的工具。需要所选模型实际支持对应能力。
+
+沿用原有 GitHub Actions 固定签名，versionCode 增至 49，可覆盖安装上一版相同签名的 APK。图片理解和工具选择效果仍需真机与模型实测；云端测试不加载模型权重。
 
 设置和 API 服务页面已按原应用 Material 3 风格重排，使用分组卡片、固定启停按钮和主题配色。地址、健康检查地址、模型 ID 与 API Key 可一键复制；密钥默认隐藏，敏感剪贴板内容标记为敏感信息。
 
@@ -12,9 +16,9 @@
 
 - 简体中文界面跟随系统语言；Android 13 及以上也可在系统应用语言设置中选择简体中文。
 - API 入口：设置 → OpenAI API 服务。先下载或导入 .litertlm 聊天模型，再启动服务。
-- 支持 /v1/models、/v1/chat/completions、多轮文本消息、SSE 流式响应和 API Key 验证。
+- 支持 /v1/models、/v1/chat/completions、多轮文本与图片消息、客户端工具调用、SSE 流式响应和 API Key 验证。
 - 默认仅本机访问，可通过 USB 转发或启用局域网访问；仅在可信网络中使用 HTTP 服务。
 
-构建时执行中文资源校验和 16 个模型列表回退与 HTTP 协议测试。真机推理、GPU 支持和后台运行仍需设备实测。仓库原有 Lint 错误未在此测试版中修复。
+构建时执行中文资源校验，以及模型列表回退、图片处理、工具协议转换与 HTTP 协议测试。真机推理、GPU 支持和后台运行仍需设备实测。仓库原有 Lint 错误未在此测试版中修复。
 
 完整说明见仓库 docs/OPENAI_API.zh-CN.md。附件提供 SHA-256 校验文件。

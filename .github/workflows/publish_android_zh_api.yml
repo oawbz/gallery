@@ -94,6 +94,6 @@ jobs:
           set -euo pipefail
           if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release create "$RELEASE_TAG" --target "$GITHUB_SHA" --prerelease \
-              --title 'Gallery 1.0.20-lan2 · 启动列表修复与固定签名' --notes-file docs/ANDROID_RELEASE.zh-CN.md
+              --title 'Gallery 1.0.20-api3 · 图片与工具调用' --notes-file docs/ANDROID_RELEASE.zh-CN.md
           fi
           gh release upload "$RELEASE_TAG" gallery-zh-openai-api.apk gallery-zh-openai-api.apk.sha256 --clobber

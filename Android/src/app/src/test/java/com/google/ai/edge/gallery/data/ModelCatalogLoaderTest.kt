@@ -42,9 +42,9 @@ class ModelCatalogLoaderTest {
     ModelCatalogLoader.load({ throw CancellationException() }, { catalog("cache") }, { catalog("bundle") })
   }
   @Test fun catalogCompatibilityDoesNotFollowDisplayVersionSuffix() {
-    assertTrue(com.google.ai.edge.gallery.BuildConfig.VERSION_NAME.contains("-lan"))
+    assertTrue(com.google.ai.edge.gallery.BuildConfig.VERSION_NAME.contains("-"))
     assertEquals("1_0_20",ModelCatalogLoader.VERSION)
     assertTrue(ModelCatalogLoader.URL.endsWith("/1_0_20.json"))
-    assertFalse(ModelCatalogLoader.URL.contains("-lan"))
+    assertFalse(ModelCatalogLoader.URL.contains("-" + com.google.ai.edge.gallery.BuildConfig.VERSION_NAME.substringAfter("-")))
   }
 }

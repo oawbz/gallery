@@ -965,7 +965,7 @@
   <string name="api_key">API 密钥（至少 16 个字符）</string>
   <string name="api_lan">允许局域网连接</string>
   <string name="api_gpu">使用 GPU（否则使用 CPU）</string>
-  <string name="api_network_notice">仅支持文本聊天。服务使用 HTTP，请在可信网络中使用或通过 USB 转发。API 调用需要密钥，连通性检查不需要。Android 系统或电池设置可能停止后台运行。</string>
+  <string name="api_network_notice">支持文本、图片与客户端工具调用，具体能力取决于所选模型。服务使用 HTTP，请在可信网络中使用或通过 USB 转发。API 调用需要密钥，连通性检查不需要。Android 系统或电池设置可能停止后台运行。</string>
   <string name="settings_app_version">应用版本：%1$s（%2$d）</string>
   <string name="settings_hf_token">Hugging Face 访问令牌</string>
   <string name="settings_token_expires">过期时间：%1$s</string>
