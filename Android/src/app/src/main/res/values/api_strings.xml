@@ -60,4 +60,10 @@
   <string name="api_context_label">Context length (tokens)</string>
   <string name="api_context_hint">Default 32K (32768); range 1024–262144. Includes history, images, tools and output. Larger settings need more memory; reduce this value if the model cannot start. Stop the service to change it.</string>
   <string name="api_context_active">Configured context: %1$d tokens</string>
+  <string name="api_thinking_section">Thinking mode</string>
+  <string name="api_thinking_label">Enable thinking by default</string>
+  <string name="api_thinking_hint">Requests thinking from supported models. Clients can override it per request. Thinking content is returned separately from the answer.</string>
+  <string name="api_thinking_budget_label">Thinking budget (tokens)</string>
+  <string name="api_thinking_budget_hint">Default 2048; use 1 to half the context length. Thinking and the answer share the output limit. Changes apply after restarting the service.</string>
+  <string name="api_thinking_active">Default thinking enabled; budget: %1$d tokens</string>
 </resources>

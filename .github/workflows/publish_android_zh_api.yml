@@ -65,6 +65,13 @@ jobs:
           GALLERY_SIGNING_PASSWORD: ${{ secrets.ANDROID_SIGNING_PASSWORD }}
         working-directory: Android/src
         run: bash gradlew --no-daemon --max-workers=2 :app:testDebugUnitTest :app:assembleDebug --console=plain
+      - name: Validate official OpenAI SDK contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/openai-contract"
+          "$RUNNER_TEMP/openai-contract/bin/pip" install --disable-pip-version-check openai==3.41.0
+          "$RUNNER_TEMP/openai-contract/bin/python" tools/check_openai_contract.py
       - name: Require stable signing before publishing
         env:
           SIGNING_PASSWORD: ${{ secrets.ANDROID_SIGNING_PASSWORD }}
@@ -94,6 +101,6 @@ jobs:
           set -euo pipefail
           if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release create "$RELEASE_TAG" --target "$GITHUB_SHA" --prerelease \
-              --title 'Gallery 1.0.20-api4 · 默认32K上下文与工具调用修复' --notes-file docs/ANDROID_RELEASE.zh-CN.md
+              --title 'Gallery 1.0.20-api5 · 思考与OpenAI接口兼容' --notes-file docs/ANDROID_RELEASE.zh-CN.md
           fi
           gh release upload "$RELEASE_TAG" gallery-zh-openai-api.apk gallery-zh-openai-api.apk.sha256 --clobber

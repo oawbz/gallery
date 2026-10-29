@@ -1010,4 +1010,10 @@
   <string name="api_context_label">上下文长度（tokens）</string>
   <string name="api_context_hint">默认 32K（32768），范围 1024–262144。包含历史、图片、工具与输出。较大设置需要更多内存；模型无法启动时请降低此值。停止服务后可修改。</string>
   <string name="api_context_active">已配置上下文：%1$d tokens</string>
+  <string name="api_thinking_section">思考模式</string>
+  <string name="api_thinking_label">默认开启思考</string>
+  <string name="api_thinking_hint">向支持思考的模型请求思考模式，客户端可按请求覆盖。思考内容与最终回答分开返回。</string>
+  <string name="api_thinking_budget_label">思考预算（tokens）</string>
+  <string name="api_thinking_budget_hint">默认 2048，可设为 1 到上下文长度的一半。思考与回答共享总输出上限。修改后需重启服务。</string>
+  <string name="api_thinking_active">默认思考已开启，预算：%1$d tokens</string>
 </resources>

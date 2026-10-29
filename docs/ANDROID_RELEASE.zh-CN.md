@@ -1,28 +1,11 @@
-简体中文界面与 Android 本地 OpenAI 兼容 API 服务测试版，版本 1.0.20-api4。
+简体中文与本地 OpenAI 兼容 API 测试版，版本 1.0.20-api5（versionCode 51）。
 
-新增上下文配置，默认 32K（32768），可手动设置 1024—262144，提供 8K/16K/32K/64K/128K/256K 快捷选项。实际传给引擎的预算会显示在服务状态中，并通过模型列表的 `context_length` 返回。大上下文能否启动取决于模型文件、后端和内存，不会静默降级。
+本版新增默认开启的思考模式（默认预算 2048 tokens），通过标准 Responses reasoning_text 返回思考内容，Chat Completions 不添加非标准字段；默认总输出提高为 4096 tokens。可在服务页面关闭或修改预算，客户端可通过标准 reasoning_effort 覆盖。
 
-本版修复 API 在推理前返回 `Selected model does not support tool calling` 的问题：不再把模型文件中未声明或为 false 的工具能力标记当作绝对拒绝条件，而是将工具定义和历史交给原生运行时尝试。此修复不保证每个模型都会生成工具调用，真实支持情况仍需设备验证。
+补齐真实聚合 usage、流式用量块、停止词、采样种子、存在/频率惩罚、JSON/schema 输出、严格工具参数验证、developer 消息、模型详情、chunked HTTP 请求，以及无状态 /v1/responses 和 typed SSE。
 
-OpenAI 兼容 API 支持图片和工具调用。`content` 可包含 `text`、`image_url`；图片可使用 Base64 data URL 或 HTTP(S) 地址，支持 PNG、JPEG、WebP。工具调用使用原生 LiteRT-LM 接口，支持 `tools`、`tool_choice`、`parallel_tool_calls`、结构化 `tool_calls`、工具结果回传及 SSE；工具由客户端执行，App 不执行客户端声明的工具。需要所选模型实际支持对应能力。
+沿用 api4 的工具元数据误判修复，以及默认 32K、最高可选 256K 的上下文配置。沿用既有 GitHub Actions Secrets 签名，可覆盖安装之前相同签名的测试包；请安全保留原签名备份。
 
-沿用原有 GitHub Actions 固定签名，versionCode 增至 50，可覆盖安装上一版相同签名的 APK。图片理解和工具选择效果仍需真机与模型实测；云端测试不加载模型权重。
+公开 /v1 不添加 context_length、timings、reasoning_content 等自定义返回字段；速度由客户端计算。完整 OpenAI 差异、参数范围及尚未实现的能力见 docs/OPENAI_API_COMPATIBILITY.zh-CN.md。统计不可用时为 null，不伪造缓存或思考 token 数。模型实际能力、LLGuidance、GPU 和性能仍需真机测试；云端测试使用替身后端并用官方 SDK 校验线协议。
 
-设置和 API 服务页面已按原应用 Material 3 风格重排，使用分组卡片、固定启停按钮和主题配色。地址、健康检查地址、模型 ID 与 API Key 可一键复制；密钥默认隐藏，敏感剪贴板内容标记为敏感信息。
-
-本版修复因 `-lan1` 版本后缀导致模型列表 URL 不存在的问题，模型列表版本与 APK 展示版本解耦；网络或缓存不可用时使用 APK 内置列表，首次离线启动也可进入应用。模型权重仍需另行下载或导入。
-
-本次修复 Android 17 / LineageOS 24 局域网权限申请：启动局域网服务前请求 ACCESS_LOCAL_NETWORK，拒绝时提供明确提示和应用权限入口。页面新增实际监听地址、网络地址刷新和不需要密钥的 /health 连通性检查。此修复不能代替对 Wi-Fi 客户端隔离、VPN 和系统防火墙的排查。
-
-发布已改用固定签名，缺少签名 Secrets 时会阻止发布。请参阅 docs/ANDROID_SIGNING.zh-CN.md 完成一次性配置。原随机签名的私钥没有保存，旧包可能仍无法覆盖安装；请先备份记录和模型，不要直接卸载。
-
-下载附件 **gallery-zh-openai-api.apk** 后在手机上安装。需要 Android 12 及以上；这是调试构建、固定签名的测试包，可能无法直接覆盖来自其他渠道、使用不同签名的应用。请先备份需要保留的聊天记录和模型文件。
-
-- 简体中文界面跟随系统语言；Android 13 及以上也可在系统应用语言设置中选择简体中文。
-- API 入口：设置 → OpenAI API 服务。先下载或导入 .litertlm 聊天模型，再启动服务。
-- 支持 /v1/models、/v1/chat/completions、多轮文本与图片消息、客户端工具调用、SSE 流式响应和 API Key 验证。
-- 默认仅本机访问，可通过 USB 转发或启用局域网访问；仅在可信网络中使用 HTTP 服务。
-
-构建时执行中文资源校验，以及模型列表回退、图片处理、工具协议转换与 HTTP 协议测试。真机推理、GPU 支持和后台运行仍需设备实测。仓库原有 Lint 错误未在此测试版中修复。
-
-完整说明见仓库 docs/OPENAI_API.zh-CN.md。附件提供 SHA-256 校验文件。
+安装附件 gallery-zh-openai-api.apk，需要 Android 12 及以上。安装后停止并重启 API 服务，先保留默认 32K 进行功能验证。

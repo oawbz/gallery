@@ -44,7 +44,7 @@ class ApiProtocolTest {
     assertTrue(parse(extra = """, "tools":[$tool],"tool_choice":"none"""").activeTools.isEmpty())
     bad(extra = """, "tool_choice":"required"""")
     bad(extra = """, "tools":[$tool,$tool]""")
-    bad(extra = """, "tools":[${tool.replace("\"parameters\":", "\"strict\":true,\"parameters\":")}]""")
+    assertTrue(parse(extra = """, "tools":[${tool.replace("\"parameters\":", "\"strict\":true,\"parameters\":")}]""").strictTools.contains("weather"))
     bad(extra = """, "tools":[$tool],"tool_choice":{"type":"function","function":{"name":"missing"}}""")
     bad(extra = """, "tools":[{"type":"custom"}]""")
   }
@@ -99,15 +99,16 @@ class ApiProtocolTest {
     bad(image("data:image/png;base64," + "A".repeat(((MAX_IMAGE_BYTES + 2) / 3) * 4 + 4)), status = 413)
   }
 
-  @Test fun nativeToolCallsAreStructuredAndThoughtChannelsAreNotLeaked() {
+  @Test fun nativeToolCallsAndReasoningRemainSeparateFromFinalText() {
     val native = Message.model(Contents.of(Content.Text("检查")),
       listOf(ToolCall("weather", mapOf("city" to "北京"))), mapOf("analysis" to "private thoughts"))
     val deltas = LiteRtProtocol.deltas(native)
-    assertEquals(ApiDelta.Text("检查"), deltas[0])
-    val call = (deltas[1] as ApiDelta.Tools).calls.single()
+    assertEquals(ApiDelta.Reasoning("private thoughts"),deltas[0])
+    assertEquals(ApiDelta.Text("检查"), deltas[1])
+    val call = (deltas[2] as ApiDelta.Tools).calls.single()
     assertTrue(call.id.startsWith("call_")); assertEquals("weather", call.name)
     assertEquals("北京", JsonParser.parseString(call.arguments).asJsonObject["city"].asString)
-    assertFalse(deltas.toString().contains("private thoughts"))
+    assertFalse((deltas[1] as ApiDelta.Text).text.contains("private thoughts"))
     assertEquals(0, call.wire(0)["index"])
   }
   @Test fun nativeToolConversationIsPreparedWithoutMetadataOptIn() {
@@ -136,6 +137,63 @@ class ApiProtocolTest {
     assertEquals(2,messages.last().contents.contents.filterIsInstance<Content.ToolResponse>().size)
     val none = request.copy(toolChoice = "none")
     assertTrue(LiteRtProtocol.conversationConfig(none,messages).tools.isEmpty())
+  }
+
+  @Test fun thinkingDefaultsOverridesAndNativeBudgetAreApplied() {
+    val defaults = parse()
+    assertTrue(defaults.enableThinking); assertEquals(2048,defaults.thinkingBudget)
+    assertEquals(4096,defaults.maxTokens)
+    val explicit = parse(extra = ",\"reasoning_effort\":\"low\",\"max_tokens\":2048")
+    val config = LiteRtProtocol.conversationConfig(explicit,LiteRtProtocol.messages(explicit) { error("No images") })
+    assertTrue(config.thinkingConfig!!.enableThinking)
+    assertEquals(512,config.thinkingConfig!!.thinkingTokenBudget)
+    assertEquals(2048,config.maxOutputToken)
+    val off = parse(extra = ",\"reasoning_effort\":\"none\"")
+    assertFalse(off.enableThinking); assertEquals(0,off.thinkingBudget); assertEquals(512,off.maxTokens)
+    val offConfig = LiteRtProtocol.conversationConfig(off,LiteRtProtocol.messages(off) { error("No images") })
+    assertFalse(offConfig.thinkingConfig!!.enableThinking)
+    val small = parse(extra = ",\"max_tokens\":32")
+    assertEquals(16,small.thinkingBudget)
+    val high = parse(extra = ",\"reasoning_effort\":\"high\"")
+    assertEquals(8192,high.thinkingBudget); assertEquals(16384,high.maxTokens)
+    assertFalse(parse(extra = ",\"reasoning_effort\":\"none\"").enableThinking)
+  }
+
+  @Test fun invalidThinkingOptionsAreRejectedBeforeInference() {
+    bad(extra = ",\"enable_thinking\":true")
+    bad(extra = ",\"thinking_budget\":2048")
+    bad(extra = ",\"enable_thinking\":\"yes\"")
+    bad(extra = ",\"thinking_budget\":-1")
+    bad(extra = ",\"thinking_budget\":1.5")
+    bad(extra = ",\"thinking_budget\":1024,\"max_tokens\":512")
+    bad(extra = ",\"enable_thinking\":false,\"thinking_budget\":10")
+    bad(extra = ",\"reasoning_effort\":\"extreme\"")
+    bad(extra = ",\"reasoning_effort\":\"high\",\"enable_thinking\":true")
+    bad(extra = ",\"reasoning_effort\":\"high\",\"thinking_budget\":100")
+    bad(extra = ",\"enable_thinking\":true,\"max_tokens\":1")
+  }
+
+  @Test fun chatRejectsNonstandardReasoningHistory() {
+    val withThought = assistant.replace("\"content\":null", "\"content\":null,\"reasoning_content\":\"需要查询两个城市\"")
+    bad("$user,$withThought,$result1,$result2", """, "tools":[$tool]""")
+  }
+
+  @Test fun standardGenerationControlsAndDeveloperMessagesReachRuntime() {
+    val r = parse("""{"role":"developer","content":"规则A"},{"role":"system","content":"规则B"},$user,$user""",
+      """, "seed":42,"presence_penalty":0.5,"frequency_penalty":-0.4,"n":1,"store":false,"logprobs":false,"logit_bias":{"123":-100,"234":0},"stop":["END"],"stream":true,"stream_options":{"include_usage":true}""")
+    assertEquals("system",r.messages[0].role)
+    assertTrue(r.messages[0].content.contains("规则A")); assertTrue(r.messages[0].content.contains("规则B"))
+    assertEquals(3,r.messages.size); assertEquals(42,r.seed)
+    assertEquals(0.5f,r.presencePenalty,0.001f); assertEquals(-0.4f,r.frequencyPenalty,0.001f)
+    assertEquals(listOf(123),r.suppressedTokens); assertEquals(listOf("END"),r.stop); assertTrue(r.includeUsage)
+    val config = LiteRtProtocol.conversationConfig(r,LiteRtProtocol.messages(r) { error("No images") })
+    assertEquals(42,config.samplerConfig!!.seed)
+    bad(extra = ",\"n\":2"); bad(extra = ",\"logprobs\":true")
+    assertTrue(parse(extra = ",\"stop\":[]").stop.isEmpty()); bad(extra = ",\"stop\":\"\"")
+    bad(extra = ",\"seed\":1.5"); bad(extra = ",\"presence_penalty\":3")
+    bad(extra = ",\"stream_options\":{\"include_usage\":true}")
+    bad(extra = ",\"logit_bias\":{\"123\":20}")
+    bad(extra = ",\"store\":true")
   }
 
 }

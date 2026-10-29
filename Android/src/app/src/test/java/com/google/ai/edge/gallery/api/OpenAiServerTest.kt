@@ -189,7 +189,7 @@ class OpenAiServerTest {
       val extra = """, "tools":[{"type":"function","function":{"name":"weather"}}],"tool_choice":"required""""
       assertEquals(422,request(server,"/v1/chat/completions",body(extra)).first)
       val (status, stream) = request(server,"/v1/chat/completions",body(extra + ",\"stream\":true"))
-      assertEquals(200,status); assertTrue(stream.contains("422")); assertFalse(stream.contains("\"finish_reason\":\"stop\""))
+      assertEquals(200,status); assertTrue(stream.contains("model_output_invalid")); assertFalse(stream.contains("\"finish_reason\":\"stop\""))
     }
   }
 
@@ -233,7 +233,7 @@ class OpenAiServerTest {
     val backend = object : FakeBackend() { override val contextTokens = 131072 }
     OpenAiServer("127.0.0.1",0,key,backend).use { server ->
       val (_, models) = request(server,"/v1/models")
-      assertEquals(131072,JsonParser.parseString(models).asJsonObject.getAsJsonArray("data")[0].asJsonObject["context_length"].asInt)
+      assertFalse(JsonParser.parseString(models).asJsonObject.getAsJsonArray("data")[0].asJsonObject.has("context_length"))
       assertEquals(200,request(server,"/v1/chat/completions",body(",\"max_tokens\":65536")).first)
       assertEquals(65536,backend.requests.last().maxTokens)
       assertEquals(400,request(server,"/v1/chat/completions",body(",\"max_completion_tokens\":131073")).first)
@@ -250,7 +250,7 @@ class OpenAiServerTest {
     val backend = object : FakeBackend() { override val contextTokens = 262144 }
     OpenAiServer("127.0.0.1",0,key,backend).use { server ->
       val (_, models) = request(server,"/v1/models")
-      assertEquals(262144,JsonParser.parseString(models).asJsonObject.getAsJsonArray("data")[0].asJsonObject["context_length"].asInt)
+      assertFalse(JsonParser.parseString(models).asJsonObject.getAsJsonArray("data")[0].asJsonObject.has("context_length"))
       assertEquals(200,request(server,"/v1/chat/completions",body(",\"max_completion_tokens\":196608")).first)
       assertEquals(196608,backend.requests.last().maxTokens)
       assertEquals(400,request(server,"/v1/chat/completions",body(",\"max_tokens\":262145")).first)
@@ -258,6 +258,111 @@ class OpenAiServerTest {
     assertEquals(32768,FakeBackend().contextTokens)
     assertTrue(validContextTokens(262144))
     assertFalse(validContextTokens(262145))
+  }
+
+  @Test fun chatUsesOnlyStandardFieldsAndKeepsThinkingOutOfFinalText() {
+    val backend = object : FakeBackend() {
+      override fun generate(request: ChatRequest, emit: (ApiDelta) -> Unit) {
+        requests.add(request)
+        emit(ApiDelta.Reasoning("先分析")); emit(ApiDelta.Reasoning("再计算")); emit(ApiDelta.Text("答案42"))
+      }
+    }
+    OpenAiServer("127.0.0.1",0,key,backend).use { server ->
+      val (status,text) = request(server,"/v1/chat/completions",body())
+      assertEquals(200,status)
+      val message = JsonParser.parseString(text).asJsonObject.getAsJsonArray("choices")[0].asJsonObject.getAsJsonObject("message")
+      assertFalse(message.has("reasoning_content"))
+      assertEquals("答案42",message["content"].asString)
+      val (_,stream) = request(server,"/v1/chat/completions",body(",\"stream\":true"))
+      val events = stream.split("\n\n").filter { it.startsWith("data: {") }.map { JsonParser.parseString(it.removePrefix("data: ")).asJsonObject }
+      val deltas = events.map { it.getAsJsonArray("choices")[0].asJsonObject.getAsJsonObject("delta") }
+      assertTrue(deltas.none { it.has("reasoning_content") })
+      assertEquals("答案42",deltas[1]["content"].asString)
+      assertTrue(stream.endsWith("data: [DONE]\n\n"))
+    }
+  }
+
+  @Test fun serverThinkingPreferencesCanBeOverriddenPerRequest() {
+    val backend = object : FakeBackend() {
+      override val defaultThinkingEnabled = false
+      override val defaultThinkingBudget = 1024
+    }
+    OpenAiServer("127.0.0.1",0,key,backend).use { server ->
+      assertEquals(200,request(server,"/v1/chat/completions",body()).first)
+      assertFalse(backend.requests.last().enableThinking)
+      assertEquals(512,backend.requests.last().maxTokens)
+      assertEquals(200,request(server,"/v1/chat/completions",body(",\"reasoning_effort\":\"medium\"")).first)
+      assertTrue(backend.requests.last().enableThinking)
+      assertEquals(2048,backend.requests.last().thinkingBudget)
+      assertEquals(4096,backend.requests.last().maxTokens)
+    }
+  }
+
+  @Test fun standardUsageIsReturnedInJsonAndFinalSseChunk() {
+    val backend = object : FakeBackend() {
+      override fun generate(request: ChatRequest, emit: (ApiDelta) -> Unit) {
+        emit(ApiDelta.Text("ok")); emit(ApiDelta.Stats(ApiStats(ApiUsage(31,5),17.5,120.0,90.0)))
+      }
+    }
+    OpenAiServer("127.0.0.1",0,key,backend).use { server ->
+      val (status,text) = request(server,"/v1/chat/completions",body())
+      assertEquals(200,status)
+      val obj = JsonParser.parseString(text).asJsonObject
+      assertEquals(31,obj.getAsJsonObject("usage")["prompt_tokens"].asInt)
+      assertEquals(5,obj.getAsJsonObject("usage")["completion_tokens"].asInt)
+      assertEquals(36,obj.getAsJsonObject("usage")["total_tokens"].asInt)
+      assertFalse(obj.has("timings"))
+      val fixtures = java.io.File((System.getProperty("gallery.contractFixtures") ?: "build/contract-fixtures")).apply { mkdirs() }
+      java.io.File(fixtures,"chat.json").writeText(text)
+      val (_,stream) = request(server,"/v1/chat/completions",body(",\"stream\":true,\"stream_options\":{\"include_usage\":true}"))
+      val events = stream.split("\n\n").filter { it.startsWith("data: {") }.map { JsonParser.parseString(it.removePrefix("data: ")).asJsonObject }
+      assertTrue(events.first()["usage"].isJsonNull)
+      java.io.File(fixtures,"chat-events.json").writeText(com.google.gson.Gson().toJson(events))
+      assertEquals(0,events.last().getAsJsonArray("choices").size())
+      assertEquals(36,events.last().getAsJsonObject("usage")["total_tokens"].asInt)
+      assertTrue(stream.endsWith("data: [DONE]\n\n"))
+    }
+    OpenAiServer("127.0.0.1",0,key,FakeBackend()).use { server ->
+      val (_,text) = request(server,"/v1/chat/completions",body())
+      assertTrue(JsonParser.parseString(text).asJsonObject["usage"].isJsonNull)
+    }
+  }
+
+  @Test fun modelDetailsCorsAndErrorFieldsFollowHttpContract() {
+    OpenAiServer("127.0.0.1",0,key,FakeBackend()).use { server ->
+      assertEquals(200,request(server,"/v1/models/local-test").first)
+      val (status,text) = request(server,"/v1/models/missing")
+      assertEquals(404,status)
+      val error = JsonParser.parseString(text).asJsonObject.getAsJsonObject("error")
+      assertTrue(error["code"].asJsonPrimitive.isString); assertEquals("model",error["param"].asString)
+      val connection = URL("http://127.0.0.1:${server.port}/v1/chat/completions").openConnection() as HttpURLConnection
+      try {
+        connection.requestMethod = "OPTIONS"
+        assertEquals(204,connection.responseCode)
+        assertTrue(connection.getHeaderField("Access-Control-Allow-Headers").contains("Authorization"))
+        assertTrue(connection.getHeaderField("X-Request-Id").startsWith("req_"))
+      } finally { connection.disconnect() }
+    }
+  }
+
+  @Test fun chunkedRequestsAndStrictJsonAreValidated() {
+    OpenAiServer("127.0.0.1",0,key,FakeBackend()).use { server ->
+      java.net.Socket("127.0.0.1",server.port).use { socket ->
+        socket.soTimeout = 3000
+        val bytes = body().toByteArray(Charsets.UTF_8)
+        val output = socket.getOutputStream()
+        output.write("POST /v1/chat/completions HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer $key\r\nContent-Type: application/json\r\nTransfer-Encoding: chunked\r\n\r\n".toByteArray())
+        val split = bytes.size / 2
+        for (chunk in listOf(bytes.copyOfRange(0,split),bytes.copyOfRange(split,bytes.size))) {
+          output.write("${chunk.size.toString(16)};test=yes\r\n".toByteArray()); output.write(chunk); output.write("\r\n".toByteArray())
+        }
+        output.write("0\r\nX-Test: trailer\r\n\r\n".toByteArray()); output.flush()
+        val response = socket.getInputStream().bufferedReader().readText()
+        assertTrue(response.startsWith("HTTP/1.1 200")); assertTrue(response.contains("你好"))
+      }
+      assertEquals(400,request(server,"/v1/chat/completions","{model:'local-test',messages:[]}").first)
+      assertEquals(400,request(server,"/v1/chat/completions",body() + "{}").first)
+    }
   }
 
 }

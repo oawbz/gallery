@@ -128,6 +128,8 @@ private fun ApiServerPanel(requestingPermissions: Boolean, startError: Int, onSt
   var lan by remember { mutableStateOf(prefs.getBoolean("lan", false)) }
   var gpu by remember { mutableStateOf(prefs.getBoolean("gpu", false)) }
   var contextTokens by remember { mutableStateOf(prefs.getInt("context_tokens", DEFAULT_CONTEXT_TOKENS).toString()) }
+  var thinking by remember { mutableStateOf(prefs.getBoolean("thinking", true)) }
+  var thinkingBudget by remember { mutableStateOf(prefs.getInt("thinking_budget", DEFAULT_THINKING_BUDGET).toString()) }
   var files by remember { mutableStateOf<List<File>>(emptyList()) }
   var selected by remember { mutableStateOf(prefs.getString("path", "") ?: "") }
   var expanded by remember { mutableStateOf(false) }
@@ -173,12 +175,14 @@ private fun ApiServerPanel(requestingPermissions: Boolean, startError: Int, onSt
             }
           } else {
             Button(
-              enabled = !locked && selected.isNotEmpty() && validContextTokens(contextTokens.toIntOrNull()) && port.toIntOrNull() in 1024..65535 && key.length >= 16 && key.all { it in '!'..'~' },
+              enabled = !locked && selected.isNotEmpty() && validContextTokens(contextTokens.toIntOrNull()) && (!thinking || validThinkingBudget(thinkingBudget.toIntOrNull(),contextTokens.toIntOrNull() ?: 0)) && port.toIntOrNull() in 1024..65535 && key.length >= 16 && key.all { it in '!'..'~' },
               modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
               onClick = {
-                prefs.edit().putString("key", key).putInt("port", port.toInt()).putString("path", selected).putBoolean("lan", lan).putBoolean("gpu", gpu).putInt("context_tokens", contextTokens.toInt()).apply()
+                val budget = thinkingBudget.toIntOrNull()?.takeIf { validThinkingBudget(it,contextTokens.toInt()) }
+                  ?: minOf(DEFAULT_THINKING_BUDGET,contextTokens.toInt() / 2)
+                prefs.edit().putString("key", key).putInt("port", port.toInt()).putString("path", selected).putBoolean("lan", lan).putBoolean("gpu", gpu).putInt("context_tokens", contextTokens.toInt()).putBoolean("thinking", thinking).putInt("thinking_budget", budget).apply()
                 onStart(Intent(context, ApiServerService::class.java)
-                  .putExtra("path", selected).putExtra("port", port.toInt()).putExtra("key", key).putExtra("lan", lan).putExtra("gpu", gpu).putExtra("context_tokens", contextTokens.toInt()))
+                  .putExtra("path", selected).putExtra("port", port.toInt()).putExtra("key", key).putExtra("lan", lan).putExtra("gpu", gpu).putExtra("context_tokens", contextTokens.toInt()).putExtra("thinking", thinking).putExtra("thinking_budget", budget))
               },
             ) {
               Icon(Icons.Rounded.PlayArrow, contentDescription = null, modifier = Modifier.size(20.dp))
@@ -202,6 +206,7 @@ private fun ApiServerPanel(requestingPermissions: Boolean, startError: Int, onSt
             Text(statusText, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
           }
           if (state.active) Text(stringResource(R.string.api_context_active, state.contextTokens), style = MaterialTheme.typography.bodyMedium)
+          if (state.active && state.thinkingEnabled) Text(stringResource(R.string.api_thinking_active,state.thinkingBudget), style = MaterialTheme.typography.bodyMedium)
           if (state.active) Text(stringResource(R.string.api_listening, if (state.lan) "0.0.0.0" else "127.0.0.1", state.port), style = MaterialTheme.typography.bodyMedium)
           else if (error == 0) Text(stringResource(R.string.api_service_summary), style = MaterialTheme.typography.bodyMedium)
           if (error == R.string.api_permission_denied) TextButton(onClick = {
@@ -247,6 +252,23 @@ private fun ApiServerPanel(requestingPermissions: Boolean, startError: Int, onSt
           }
         }
         Text(stringResource(R.string.api_model_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+      }
+
+      SettingsSection(title = stringResource(R.string.api_thinking_section), icon = Icons.Rounded.Psychology) {
+        Row(Modifier.fillMaxWidth().toggleable(value = thinking, enabled = !locked, role = Role.Switch, onValueChange = { thinking = it }),
+          verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+          Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(stringResource(R.string.api_thinking_label),style = MaterialTheme.typography.bodyLarge)
+            Text(stringResource(R.string.api_thinking_hint),style = MaterialTheme.typography.bodySmall,color = MaterialTheme.colorScheme.onSurfaceVariant)
+          }
+          Switch(checked = thinking,onCheckedChange = null,enabled = !locked)
+        }
+        OutlinedTextField(value = thinkingBudget,onValueChange = { thinkingBudget = it },
+          enabled = !locked && thinking, singleLine = true, modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.medium,
+          label = { Text(stringResource(R.string.api_thinking_budget_label)) },
+          supportingText = { Text(stringResource(R.string.api_thinking_budget_hint)) },
+          isError = thinking && !validThinkingBudget(thinkingBudget.toIntOrNull(),contextTokens.toIntOrNull() ?: 0),
+          keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
       }
 
       SettingsSection(title = stringResource(R.string.api_network_section), icon = Icons.Rounded.Wifi) {

@@ -61,12 +61,12 @@ for chunk in client.chat.completions.create(
 ## 兼容范围
 
 - `GET /v1/models`：当前所选的单个本地模型。
-- `POST /v1/chat/completions`：文本内容，支持首条 `system`，以及交替出现的 `user` / `assistant` 消息，最后必须是 `user`。
-- 支持 `stream`、`temperature`（0—2）、`top_p`（0—1），以及 `max_tokens` 或 `max_completion_tokens`（二选一，1—当前配置的上下文长度，默认输出 512）。引擎上下文预算默认 32768（32K），可在服务页面配置为 1024—262144（256K），包含历史、图片、工具定义及输出；生成仍受模型自身限制。
+- `POST /v1/chat/completions`：支持开头的 `system` / `developer`、普通 `user` / `assistant`、工具调用和 `tool` 结果；末条为用户消息或完整工具结果。
+- 支持 `stream`、`temperature`（0—2）、`top_p`（0—1），以及 `max_tokens` 或 `max_completion_tokens`（二选一，1—当前配置的上下文长度，默认关闭思考时输出 512；开启时默认总输出 4096）。引擎上下文预算默认 32768（32K），可在服务页面配置为 1024—262144（256K），包含历史、图片、工具定义及输出；生成仍受模型自身限制。
 - 每个请求创建独立会话。多轮调用需重新发送完整消息历史，不会读取或修改 Gallery 的聊天记录。
 - 同时只执行一个推理请求；繁忙时返回 429。单次推理超时为 5 分钟。请求体上限为 12 MiB，最多 256 条消息。
-- 支持用户消息中的图片，以及由客户端执行的函数工具调用；需要模型本身支持。音频、嵌入、Responses API、`usage` 统计或 `stream_options` 等参数暂不支持；不支持的参数返回 400。
-- 返回工具调用时 `finish_reason` 为 `tool_calls`，文本完成时为 `stop`；当前适配层仍不区分文本正常结束与输出词元限制。不返回未经测量的词元统计。
+- 支持用户消息中的图片，以及由客户端执行的函数工具调用；需要模型本身支持。api5 增加无状态 Responses、真实聚合 usage、stream_options.include_usage、思考、停止词与 JSON 输出。音频、嵌入及其它云端接口尚未接入；完整参数与限制见 [兼容性对比](OPENAI_API_COMPATIBILITY.zh-CN.md)。
+- 返回工具调用时 `finish_reason` 为 `tool_calls`，文本正常完成时为 `stop`；有原生计数且达到输出上限时推断为 `length`。usage 只返回测得的原生计数。
 
 ## 验证范围
 
@@ -131,11 +131,11 @@ Android 17 上，启用“允许局域网连接”后启动服务时，需要授
 {"role":"tool","tool_call_id":"响应中的调用ID","content":"北京，晴，25℃"}
 ```
 
-支持多个调用，结果通过 `tool_call_id` 匹配，允许结果顺序不同；必须回传全部结果，未知、重复或遗漏的 ID 会返回 400。SSE 以 `delta.tool_calls` 返回完整参数字符串和递增 `index`，以 `finish_reason: "tool_calls"` 及 `[DONE]` 结束。分析通道不会当作普通文本输出。
+支持多个调用，结果通过 `tool_call_id` 匹配，允许结果顺序不同；必须回传全部结果，未知、重复或遗漏的 ID 会返回 400。SSE 以 `delta.tool_calls` 返回完整参数字符串和递增 `index`，以 `finish_reason: "tool_calls"` 及 `[DONE]` 结束。分析通道不会当作普通文本输出；api5 的 Responses 通过标准 reasoning_text 项返回；Chat Completions 不添加独立思考字段。
 
 `tool_choice` 支持 `auto`、`none`、`required` 或 `{"type":"function","function":{"name":"get_weather"}}`。指定函数时仅向模型提供该函数；`required` 会增加调用指令并校验实际输出，模型未生成调用时返回 422，不会把普通文本当作成功的必选调用。`parallel_tool_calls: false` 时若模型仍返回多个调用，也返回 422。流式响应已开始时，生成失败通过 SSE `error` 事件和 `[DONE]` 返回。LiteRT-LM 未提供这些选项的硬约束生成接口，因此模型可能需要重试或调整提示。
 
-工具参数使用对象 JSON Schema；支持最多 64 个不同名称的函数。`strict: true` 暂不支持，会明确返回 400；本接口不承诺严格 Schema 生成。工具由外部客户端执行；不使用 Gallery Agent Chat 的内置工具或 MCP 连接，也不在手机上自动执行客户端提供的函数。
+工具参数使用对象 JSON Schema；支持最多 64 个不同名称的函数。api5 支持 `strict:true` 与明确的 JSON Schema 子集，并校验实际调用参数；失败返回 422。具体 Schema 范围见兼容性对比。工具由外部客户端执行；不使用 Gallery Agent Chat 的内置工具或 MCP 连接，也不在手机上自动执行客户端提供的函数。
 
 
 ## 工具能力标记兼容修复（1.0.20-api4）
@@ -147,6 +147,17 @@ Chatbox 的“该模型不支持工具调用”是测试失败时的通用提示
 
 ## 上下文配置（1.0.20-api4）
 
-在 **设置 → OpenAI API 服务 → 模型与推理** 中设置“上下文长度”，默认 **32K（32768 tokens）**。提供 8K、16K、32K、64K、128K、256K 快捷选项，也可输入 1024—262144 的整数。设置会保存，停止并重新启动服务后生效。运行状态显示已配置的 token 数，`GET /v1/models` 通过 `context_length` 返回同一预算，供 Chatbox 等客户端读取。
+在 **设置 → OpenAI API 服务 → 模型与推理** 中设置“上下文长度”，默认 **32K（32768 tokens）**。提供 8K、16K、32K、64K、128K、256K 快捷选项，也可输入 1024—262144 的整数。设置会保存，停止并重新启动服务后生效。运行状态显示已配置的 token 数，`GET /v1/models` 仅返回标准模型信息，Chatbox 等客户端的上下文长度需与此配置手动保持一致。
 
-选择 128K 或 256K 会实际将 131072 或 262144 传给引擎，不会静默降回 4K。模型文件的导出方式、后端和手机内存决定能否初始化；32K/128K/256K 的设置值不代表所有模型都支持对应长度。运行时的上下文元数据可能表示默认初始化值，因此本接口不将其简单当作硬上限。若无法启动请降低上下文；内存不足时 Android 也可能结束进程。默认输出仍为 512，可通过 `max_tokens` 或 `max_completion_tokens` 单独调整；输入与输出合计仍须容纳在所选上下文中。
+选择 128K 或 256K 会实际将 131072 或 262144 传给引擎，不会静默降回 4K。模型文件的导出方式、后端和手机内存决定能否初始化；32K/128K/256K 的设置值不代表所有模型都支持对应长度。运行时的上下文元数据可能表示默认初始化值，因此本接口不将其简单当作硬上限。若无法启动请降低上下文；内存不足时 Android 也可能结束进程。api5 默认开启思考时总输出为 4096，关闭时为 512；可通过 `max_tokens` 或 `max_completion_tokens` 单独调整；输入与输出合计仍须容纳在所选上下文中。
+
+
+## api5 思考与 OpenAI 兼容增强
+
+服务页面新增思考开关和预算，默认开启、预算 2048 tokens；Responses 可返回模型实际生成的标准 reasoning_text 项，Chat Completions 仅返回最终 content。支持真实 usage、流式用量块、停止词、采样种子、存在/频率惩罚、JSON 输出、模型详情和无状态 Responses。完整支持矩阵、参数范围、SDK 验证方式与尚未实现的接口见 [OpenAI API 兼容性对比](OPENAI_API_COMPATIBILITY.zh-CN.md)。
+
+```json
+{"model":"gemma-4-E4B-it","messages":[{"role":"user","content":"解释你的结论"}],"reasoning_effort":"medium","max_completion_tokens":4096,"stream":true,"stream_options":{"include_usage":true}}
+```
+
+max_completion_tokens 包含思考和最终回答。`reasoning_effort` 可请求 none/low/medium/high；API 没有 enable_thinking/thinking_budget 自定义字段，具体默认预算通过手机页面设置。缺少原生统计时 usage 为 null；不会根据字符长度估算 tokens。实际模型能否思考与调用工具，仍需设备验证。

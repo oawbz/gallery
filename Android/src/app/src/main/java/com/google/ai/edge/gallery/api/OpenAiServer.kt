@@ -33,10 +33,12 @@ import java.util.concurrent.atomic.AtomicBoolean
 internal interface ChatBackend : Closeable {
   val modelId: String
   val contextTokens: Int get() = DEFAULT_CONTEXT_TOKENS
+  val defaultThinkingEnabled: Boolean get() = true
+  val defaultThinkingBudget: Int get() = DEFAULT_THINKING_BUDGET
   fun validate(request: ChatRequest) {}
   fun generate(request: ChatRequest, emit: (ApiDelta) -> Unit)
 }
-internal class ApiFailure(val status: Int, override val message: String) : Exception(message)
+internal class ApiFailure(val status: Int, override val message: String, val param: String? = null) : Exception(message)
 
 /** A bounded HTTP/1.1 server. Each request owns its connection and inference conversation. */
 internal class OpenAiServer(
@@ -77,6 +79,7 @@ internal class OpenAiServer(
     val input = socket.getInputStream().buffered()
     val output = socket.getOutputStream()
     var streaming = false
+    var responsesOutput: ApiResponseOutput? = null
     try {
       val requestLine = line(input).split(' ')
       if (requestLine.size != 3 || requestLine[2] != "HTTP/1.1") fail(400, "Invalid HTTP request")
@@ -93,100 +96,147 @@ internal class OpenAiServer(
         if (headers.containsKey(name)) fail(400, "Duplicate header")
         headers[name] = line.substring(colon + 1).trim()
       }
+      if (requestLine[0] == "OPTIONS") { head(output,204,"application/json"); output.flush(); return }
       // A public liveness probe reveals no model data and helps diagnose LAN reachability.
       if (requestLine[0] == "GET" && requestLine[1] == "/health") {
         json(output, 200, mapOf("status" to "ok"))
         return
       }
-      if (!MessageDigest.isEqual(
-          (headers["authorization"] ?: "").toByteArray(), "Bearer $apiKey".toByteArray())) {
+      val authorization = headers["authorization"] ?: ""
+      if (!authorization.substringBefore(' ').equals("Bearer",true) || !MessageDigest.isEqual(
+          authorization.substringAfter(' ', "").toByteArray(), apiKey.toByteArray())) {
         fail(401, "Invalid API key")
       }
       val method = requestLine[0]
       val path = requestLine[1].substringBefore('?')
+      val model = mapOf("id" to backend.modelId,"object" to "model","created" to 0,"owned_by" to "local")
       if (method == "GET" && path == "/v1/models") {
-        json(output, 200, mapOf("object" to "list", "data" to listOf(mapOf(
-          "id" to backend.modelId, "object" to "model", "created" to 0, "owned_by" to "local",
-          "context_length" to backend.contextTokens))))
-        return
+        json(output,200,mapOf("object" to "list","data" to listOf(model))); return
       }
-      if (path != "/v1/chat/completions") fail(404, "Unknown endpoint")
-      if (method != "POST") fail(405, "Use POST for chat completions")
-      if (headers.containsKey("transfer-encoding")) fail(400, "Chunked request bodies are unsupported")
+      if (method == "GET" && path.startsWith("/v1/models/")) {
+        val name = java.net.URLDecoder.decode(path.removePrefix("/v1/models/").replace("+","%2B"),"UTF-8")
+        if (name != backend.modelId) throw ApiFailure(404,"Unknown model","model")
+        json(output,200,model); return
+      }
+      if (path !in setOf("/v1/chat/completions","/v1/responses")) fail(404, "Unknown endpoint")
+      if (method != "POST") fail(405, "Use POST for generation requests")
       if (headers["content-type"]?.substringBefore(';')?.trim() != "application/json") {
-        fail(415, "Content-Type must be application/json")
+        fail(415,"Content-Type must be application/json")
       }
-      val length = headers["content-length"]?.toIntOrNull() ?: fail(411, "Content-Length required")
-      if (length !in 1..MAX_REQUEST_BYTES) fail(413, "Request body must be between 1 byte and 12 MiB")
-      val bytes = ByteArray(length)
-      var offset = 0
-      while (offset < length) {
-        val n = input.read(bytes, offset, length - offset)
-        if (n < 0) fail(400, "Incomplete request body")
-        offset += n
-      }
-      val request = parse(String(bytes, Charsets.UTF_8))
+      val bytes = readBody(input,headers)
+      val body = try { Charsets.UTF_8.newDecoder().decode(java.nio.ByteBuffer.wrap(bytes)).toString() }
+        catch (_: java.nio.charset.CharacterCodingException) { fail(400,"Request body must be valid UTF-8") }
+      val responsesRequest = if (path == "/v1/responses") ApiResponses.parse(body,backend) else null
+      val request = responsesRequest?.chat ?: parse(body)
       if (!busy.compareAndSet(false, true)) fail(429, "Model is busy; retry after the current request")
       try {
         backend.validate(request)
+        if (responsesRequest != null) {
+          if (request.stream) { head(output,200,"text/event-stream; charset=utf-8"); streaming = true }
+          val response = ApiResponseOutput(responsesRequest,backend.modelId,
+            if (request.stream) { type,data -> responseEvent(output,type,data) } else null)
+          responsesOutput = response
+          response.begin()
+          val result = complete(backend,request,response::delta)
+          val value = response.finish(result)
+          if (!request.stream) json(output,200,value) else output.flush()
+          return
+        }
         val id = "chatcmpl-${UUID.randomUUID()}"
         val created = System.currentTimeMillis() / 1000
         fun chunk(delta: Map<String, Any>, finish: String? = null) = mapOf(
           "id" to id, "object" to "chat.completion.chunk", "created" to created,
           "model" to backend.modelId,
-          "choices" to listOf(mapOf("index" to 0, "delta" to delta, "finish_reason" to finish)))
-        val text = StringBuilder()
-        val calls = mutableListOf<ApiToolCall>()
+          "choices" to listOf(mapOf("index" to 0, "delta" to delta,"logprobs" to null, "finish_reason" to finish))) +
+          (if (request.includeUsage) mapOf("usage" to null) else emptyMap())
+        var toolIndex = 0
         if (request.stream) {
-          head(output, 200, "text/event-stream; charset=utf-8")
-          streaming = true
-          event(output, chunk(mapOf("role" to "assistant")))
+          head(output,200,"text/event-stream; charset=utf-8"); streaming = true
+          event(output,chunk(mapOf("role" to "assistant")))
         }
-        backend.generate(request) { delta ->
-          when (delta) {
-            is ApiDelta.Text -> {
-              text.append(delta.text)
-              if (request.stream) event(output, chunk(mapOf("content" to delta.text)))
-            }
+        val result = complete(backend,request) { delta ->
+          if (request.stream) when (delta) {
+            is ApiDelta.Text -> event(output,chunk(mapOf("content" to delta.text)))
+            is ApiDelta.Reasoning -> Unit // Chat Completions has no standard raw-reasoning field.
             is ApiDelta.Tools -> {
-              val allowed = request.activeTools.map { it["name"].asString }.toSet()
-              if (delta.calls.any { it.name !in allowed } ||
-                  (!request.parallelToolCalls && calls.size + delta.calls.size > 1)) {
-                throw ApiFailure(422, "Model returned calls outside the requested tool choice")
-              }
-              val offset = calls.size
-              calls.addAll(delta.calls)
-              if (request.stream && delta.calls.isNotEmpty()) event(output, chunk(mapOf(
-                "tool_calls" to delta.calls.mapIndexed { index, call -> call.wire(offset + index) })))
+              val indexed = delta.calls.map { it.wire(toolIndex++) }
+              if (indexed.isNotEmpty()) event(output,chunk(mapOf("tool_calls" to indexed)))
             }
+            is ApiDelta.Stats -> Unit
           }
         }
-        if (request.toolChoice == "required" && calls.isEmpty()) {
-          throw ApiFailure(422, "Model did not produce the required tool call; retry or change the prompt")
-        }
-        val finish = if (calls.isEmpty()) "stop" else "tool_calls"
         if (request.stream) {
-          event(output, chunk(emptyMap(), finish))
+          event(output,chunk(emptyMap(),result.finish))
+          if (request.includeUsage) event(output,mapOf("id" to id,"object" to "chat.completion.chunk",
+            "created" to created,"model" to backend.modelId,"choices" to emptyList<Any>(),
+            "usage" to result.stats?.usage?.wire()))
           output.write("data: [DONE]\n\n".toByteArray()); output.flush()
         } else {
-          val message = mutableMapOf<String, Any?>("role" to "assistant",
-            "content" to text.toString().takeIf { it.isNotEmpty() || calls.isEmpty() })
-          if (calls.isNotEmpty()) message["tool_calls"] = calls.map { it.wire() }
-          json(output, 200, mapOf("id" to id, "object" to "chat.completion", "created" to created,
-            "model" to backend.modelId, "choices" to listOf(mapOf("index" to 0,
-              "message" to message, "finish_reason" to finish))))
+          json(output,200,mapOf("id" to id,"object" to "chat.completion","created" to created,
+            "model" to backend.modelId,"choices" to listOf(mapOf("index" to 0,
+              "message" to result.message(),"logprobs" to null,"finish_reason" to result.finish)),
+            "usage" to result.stats?.usage?.wire(),
+            "service_tier" to "default","metadata" to request.metadata))
         }
       } finally { busy.set(false) }
     } catch (e: Exception) {
-      val status = (e as? ApiFailure)?.status ?: 500
+      val status = (e as? ApiFailure)?.status ?: if (e is java.net.SocketTimeoutException) 408 else 500
+      val code = when(status) { 401 -> "invalid_api_key"; 404 -> if ((e as? ApiFailure)?.param == "model") "model_not_found" else "not_found";
+        408,504 -> "request_timeout"; 413 -> "request_too_large"; 422 -> "model_output_invalid"; 429 -> "rate_limit_exceeded";
+        500 -> "inference_error"; else -> "invalid_request" }
       val error = mapOf("error" to mapOf("message" to (if (status == 500) "Local inference failed" else e.message),
-        "type" to (if (status >= 500) "server_error" else "invalid_request_error"), "code" to status))
-      if (streaming) { event(output, error); output.write("data: [DONE]\n\n".toByteArray()); output.flush() }
+        "type" to (if (status >= 500) "server_error" else if (status == 429) "rate_limit_error" else if (status == 401) "authentication_error" else "invalid_request_error"), "code" to code,"param" to (e as? ApiFailure)?.param))
+      if (streaming && responsesOutput != null) {
+        responsesOutput.failed(if (status == 500) "Local inference failed" else e.message ?: "Request failed",code)
+        output.flush()
+      } else if (streaming) { event(output, error); output.write("data: [DONE]\n\n".toByteArray()); output.flush() }
       else json(output, status, error)
     }
   }
 
-  internal fun parse(body: String): ChatRequest = ApiProtocol.parse(body, backend.modelId, backend.contextTokens)
+  internal fun parse(body: String): ChatRequest = ApiProtocol.parse(body, backend.modelId, backend.contextTokens, backend.defaultThinkingEnabled, backend.defaultThinkingBudget)
+
+  private fun readBody(input: InputStream, headers: Map<String,String>): ByteArray {
+    val transfer = headers["transfer-encoding"]
+    if (transfer != null && headers.containsKey("content-length")) fail(400,"Do not combine Content-Length and Transfer-Encoding")
+    fun readExactly(length: Int): ByteArray {
+      val bytes = ByteArray(length)
+      var offset = 0
+      while (offset < length) {
+        val n = input.read(bytes,offset,length - offset)
+        if (n < 0) fail(400,"Incomplete request body")
+        offset += n
+      }
+      return bytes
+    }
+    if (transfer == null) {
+      val length = headers["content-length"]?.toIntOrNull() ?: fail(411,"Content-Length or chunked encoding required")
+      if (length !in 1..MAX_REQUEST_BYTES) fail(413,"Request body must be between 1 byte and 12 MiB")
+      return readExactly(length)
+    }
+    if (!transfer.equals("chunked",true)) fail(400,"Only chunked Transfer-Encoding is supported")
+    val body = java.io.ByteArrayOutputStream()
+    while (true) {
+      val sizeText = line(input).substringBefore(';').trim()
+      if (!Regex("[0-9a-fA-F]{1,16}").matches(sizeText)) fail(400,"Invalid chunk size")
+      val length = sizeText.toLongOrNull(16) ?: fail(413,"Chunk too large")
+      if (length > MAX_REQUEST_BYTES - body.size()) fail(413,"Request body exceeds 12 MiB")
+      if (length == 0L) {
+        var trailerBytes = 0
+        while (true) {
+          val trailer = line(input)
+          trailerBytes += trailer.length
+          if (trailerBytes > 16384) fail(431,"Trailers too large")
+          if (trailer.isEmpty()) break
+          if (!trailer.contains(':')) fail(400,"Invalid trailer")
+        }
+        if (body.size() == 0) fail(400,"Empty request body")
+        return body.toByteArray()
+      }
+      body.write(readExactly(length.toInt()))
+      if (input.read() != 13 || input.read() != 10) fail(400,"Invalid chunk terminator")
+    }
+  }
 
   private fun line(input: InputStream): String {
     val bytes = java.io.ByteArrayOutputStream()
@@ -199,11 +249,26 @@ internal class OpenAiServer(
     }
   }
   private fun fail(status: Int, message: String): Nothing = throw ApiFailure(status, message)
-  private fun head(out: OutputStream, status: Int, type: String) {
-    out.write("HTTP/1.1 $status ${if (status == 200) "OK" else "Error"}\r\nContent-Type: $type\r\nConnection: close\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\n\r\n".toByteArray())
+  private fun head(out: OutputStream, status: Int, type: String, length: Int? = null) {
+    val reason = when(status) { 200 -> "OK"; 204 -> "No Content"; 400 -> "Bad Request"; 401 -> "Unauthorized"; 404 -> "Not Found"; 405 -> "Method Not Allowed"; 408 -> "Request Timeout"; 413 -> "Payload Too Large"; 422 -> "Unprocessable Entity"; 429 -> "Too Many Requests"; 500 -> "Internal Server Error"; else -> "Error" }
+    val extra = buildString {
+      if (length != null) append("Content-Length: $length\r\n")
+      if (status == 401) append("WWW-Authenticate: Bearer\r\n")
+      if (status == 429) append("Retry-After: 1\r\n")
+      if (status == 405) append("Allow: POST, OPTIONS\r\n")
+    }
+    out.write(("HTTP/1.1 $status $reason\r\nContent-Type: $type\r\nConnection: close\r\n" +
+      "Cache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nX-Request-Id: req_${UUID.randomUUID()}\r\n" +
+      "Access-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS\r\n" +
+      "Access-Control-Allow-Headers: Authorization, Content-Type, OpenAI-Beta\r\n" +
+      "Access-Control-Expose-Headers: X-Request-Id, Retry-After\r\n$extra\r\n").toByteArray())
   }
   private fun json(out: OutputStream, status: Int, value: Any) {
-    head(out, status, "application/json; charset=utf-8"); out.write(gson.toJson(value).toByteArray(Charsets.UTF_8)); out.flush()
+    val bytes = gson.toJson(value).toByteArray(Charsets.UTF_8)
+    head(out,status,"application/json; charset=utf-8",bytes.size); out.write(bytes); out.flush()
+  }
+  private fun responseEvent(out: OutputStream, type: String, value: Any) {
+    out.write("event: $type\ndata: ${gson.toJson(value)}\n\n".toByteArray(Charsets.UTF_8)); out.flush()
   }
   private fun event(out: OutputStream, value: Any) {
     out.write("data: ${gson.toJson(value)}\n\n".toByteArray(Charsets.UTF_8)); out.flush()

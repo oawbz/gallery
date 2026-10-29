@@ -17,6 +17,10 @@
 package com.google.ai.edge.gallery.api
 
 import com.google.ai.edge.litertlm.Backend
+import com.google.ai.edge.litertlm.ExperimentalApi
+import com.google.ai.edge.litertlm.ExperimentalFlags
+import com.google.ai.edge.litertlm.RepetitionPenaltyConfig
+import com.google.ai.edge.litertlm.SuppressTokensConfig
 import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
 import com.google.ai.edge.litertlm.Message
@@ -31,8 +35,16 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 
 /** Owns a separate engine; API conversations never mutate Gallery chat history. */
-internal class LocalModelBackend(file: File, gpu: Boolean, override val contextTokens: Int = DEFAULT_CONTEXT_TOKENS) : ChatBackend {
-  init { require(validContextTokens(contextTokens)) { "Context must be between 1024 and 262144 tokens" } }
+@OptIn(ExperimentalApi::class)
+internal class LocalModelBackend(
+  file: File, gpu: Boolean, override val contextTokens: Int = DEFAULT_CONTEXT_TOKENS,
+  override val defaultThinkingEnabled: Boolean = true,
+  override val defaultThinkingBudget: Int = DEFAULT_THINKING_BUDGET,
+) : ChatBackend {
+  init {
+    require(validContextTokens(contextTokens)) { "Context must be between 1024 and 262144 tokens" }
+    require(!defaultThinkingEnabled || validThinkingBudget(defaultThinkingBudget, contextTokens)) { "Thinking budget must be between 1 and half the context length" }
+  }
   override val modelId = file.nameWithoutExtension
   private val capabilities = ModelInfo.from(file.absolutePath).use { info ->
     val vision = info.inputModalities().vision
@@ -49,7 +61,12 @@ internal class LocalModelBackend(file: File, gpu: Boolean, override val contextT
     maxNumTokens = contextTokens,
   ))
   init {
-    try { engine.initialize() } catch (e: Exception) { engine.close(); throw e }
+    synchronized(ExperimentalFlags) {
+      val previous = ExperimentalFlags.enableBenchmark
+      try { ExperimentalFlags.enableBenchmark = true; engine.initialize() }
+      catch (e: Exception) { engine.close(); throw e }
+      finally { ExperimentalFlags.enableBenchmark = previous }
+    }
   }
 
   override fun validate(request: ChatRequest) {
@@ -71,6 +88,7 @@ internal class LocalModelBackend(file: File, gpu: Boolean, override val contextT
       val done = CountDownLatch(1)
       val error = AtomicReference<Throwable?>()
       var submitted = false
+      var stopped: ApiStopGeneration? = null
       try {
         conversation.sendMessageAsync(messages.last(), object : MessageCallback {
           override fun onMessage(message: Message) {
@@ -80,7 +98,10 @@ internal class LocalModelBackend(file: File, gpu: Boolean, override val contextT
           }
           override fun onDone() { done.countDown() }
           override fun onError(throwable: Throwable) { error.set(throwable); done.countDown() }
-        })
+        }, repetitionPenaltyConfig = if (request.presencePenalty == 0f && request.frequencyPenalty == 0f) null else
+          RepetitionPenaltyConfig(presencePenalty = request.presencePenalty,frequencyPenalty = request.frequencyPenalty),
+          suppressTokensConfig = request.suppressedTokens.takeIf { it.isNotEmpty() }?.let { SuppressTokensConfig(it) },
+          responseFormat = LiteRtProtocol.responseFormat(request))
         submitted = true
         val deadline = System.nanoTime() + TimeUnit.MINUTES.toNanos(5)
         while (done.count > 0 || chunks.isNotEmpty()) {
@@ -89,7 +110,8 @@ internal class LocalModelBackend(file: File, gpu: Boolean, override val contextT
           chunks.poll(100, TimeUnit.MILLISECONDS)?.let(emit)
         }
         error.get()?.let { throw it }
-      } finally {
+      } catch (e: ApiStopGeneration) { stopped = e }
+      finally {
         if (submitted && done.count > 0) {
           conversation.cancelProcess()
           // Native callbacks complete before closing the conversation on this worker thread.
@@ -100,6 +122,9 @@ internal class LocalModelBackend(file: File, gpu: Boolean, override val contextT
           if (interrupted) Thread.currentThread().interrupt()
         }
       }
+      // Read real counters before closing the native conversation. Missing metrics stay unknown.
+      runCatching { LiteRtProtocol.stats(conversation.getBenchmarkInfo()) }.getOrNull()?.let { emit(ApiDelta.Stats(it)) }
+      stopped?.let { throw it }
     }
   }
   @Synchronized override fun close() { engine.close() }

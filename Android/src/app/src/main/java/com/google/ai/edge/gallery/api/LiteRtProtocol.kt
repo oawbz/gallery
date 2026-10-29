@@ -19,6 +19,10 @@ package com.google.ai.edge.gallery.api
 import com.google.ai.edge.litertlm.Content
 import com.google.ai.edge.litertlm.ConversationConfig
 import com.google.ai.edge.litertlm.SamplerConfig
+import com.google.ai.edge.litertlm.ThinkingConfig
+import com.google.ai.edge.litertlm.ResponseFormat
+import com.google.ai.edge.litertlm.BenchmarkInfo
+import com.google.ai.edge.litertlm.ExperimentalApi
 import com.google.ai.edge.litertlm.Contents
 import com.google.ai.edge.litertlm.Message
 import com.google.ai.edge.litertlm.OpenApiTool
@@ -28,6 +32,7 @@ import com.google.gson.ToNumberPolicy
 import java.util.UUID
 
 /** Preserves native multimodal/tool messages, without turning calls into ordinary text. */
+@OptIn(ExperimentalApi::class)
 internal object LiteRtProtocol {
   private val gson = com.google.gson.GsonBuilder().setObjectToNumberStrategy(ToNumberPolicy.LONG_OR_DOUBLE).create()
   @Suppress("UNCHECKED_CAST")
@@ -66,7 +71,8 @@ internal object LiteRtProtocol {
       result.add(when (m.role) {
         "system" -> Message.system(contents)
         "user" -> Message.user(contents)
-        else -> Message.model(contents, m.toolCalls.map { ToolCall(it.name, arguments(it.arguments)) })
+        else -> Message.model(contents, m.toolCalls.map { ToolCall(it.name, arguments(it.arguments)) },
+          m.reasoningContent?.let { mapOf("thought" to it) } ?: emptyMap())
       })
       index++
     }
@@ -85,12 +91,32 @@ internal object LiteRtProtocol {
         Contents.of(listOfNotNull(system?.toString(), toolInstruction.takeIf { it.isNotEmpty() }).joinToString("\n")) else null,
       initialMessages = turns.dropLast(1),
       tools = tools(request), automaticToolCalling = false,
-      samplerConfig = SamplerConfig(topK = 40, topP = request.topP, temperature = request.temperature),
-      maxOutputToken = request.maxTokens ?: 512,
+      samplerConfig = SamplerConfig(topK = 40, topP = request.topP, temperature = request.temperature, seed = request.seed),
+      maxOutputToken = request.maxTokens ?: if (request.enableThinking) 4096 else 512,
+      thinkingConfig = ThinkingConfig(enableThinking = request.enableThinking, thinkingTokenBudget = request.thinkingBudget),
+      enableResponseFormat = responseFormat(request) != null,
     )
   }
 
+  fun responseFormat(request: ChatRequest): ResponseFormat? = request.responseFormat?.let { format ->
+    when (format["type"].asString) {
+      "json_object" -> ResponseFormat.json("{\"type\":\"object\"}")
+      "json_schema" -> ResponseFormat.json(format.getAsJsonObject("json_schema")["schema"].toString())
+      else -> null
+    }
+  }
+
+  fun stats(info: BenchmarkInfo): ApiStats {
+    fun positive(value: Double) = value.takeIf { it.isFinite() && it > 0.0 }
+    val usage = if (info.lastPrefillTokenCount > 0 && info.lastDecodeTokenCount >= 0)
+      ApiUsage(info.lastPrefillTokenCount,info.lastDecodeTokenCount) else null
+    return ApiStats(usage,positive(info.lastDecodeTokensPerSecond),positive(info.lastPrefillTokensPerSecond),
+      info.timeToFirstTokenInSecond.takeIf { usage != null && it.isFinite() && it >= 0.0 }?.times(1000))
+  }
+
   fun deltas(message: Message): List<ApiDelta> = buildList {
+    val reasoning = listOf("thought", "analysis", "reasoning").mapNotNull { message.channels[it] }.joinToString("")
+    if (reasoning.isNotEmpty()) add(ApiDelta.Reasoning(reasoning))
     val text = message.contents.contents.filterIsInstance<Content.Text>().joinToString("") { it.text }
     if (text.isNotEmpty()) add(ApiDelta.Text(text))
     if (message.toolCalls.isNotEmpty()) add(ApiDelta.Tools(message.toolCalls.map {

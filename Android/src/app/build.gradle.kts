@@ -42,8 +42,8 @@ android {
     applicationId = "com.google.aiedge.gallery"
     minSdk = 31
     targetSdk = 37
-    versionCode = 50
-    versionName = "1.0.20-api4"
+    versionCode = 51
+    versionName = "1.0.20-api5"
 
     // Needed for HuggingFace auth workflows.
     // Use the scheme of the "Redirect URLs" in HuggingFace app.
@@ -174,4 +174,12 @@ protobuf {
       }
     }
   }
+}
+
+
+// Keep generated API contract fixtures in the test task outputs, including Gradle cache restores.
+tasks.withType<org.gradle.api.tasks.testing.Test>().configureEach {
+  val fixtures = project.layout.buildDirectory.dir("contract-fixtures/$name")
+  systemProperty("gallery.contractFixtures",fixtures.get().asFile.absolutePath)
+  outputs.dir(fixtures)
 }
