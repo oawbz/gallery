@@ -32,6 +32,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 internal interface ChatBackend : Closeable {
   val modelId: String
+  val contextTokens: Int get() = DEFAULT_CONTEXT_TOKENS
   fun validate(request: ChatRequest) {}
   fun generate(request: ChatRequest, emit: (ApiDelta) -> Unit)
 }
@@ -105,7 +106,8 @@ internal class OpenAiServer(
       val path = requestLine[1].substringBefore('?')
       if (method == "GET" && path == "/v1/models") {
         json(output, 200, mapOf("object" to "list", "data" to listOf(mapOf(
-          "id" to backend.modelId, "object" to "model", "created" to 0, "owned_by" to "local"))))
+          "id" to backend.modelId, "object" to "model", "created" to 0, "owned_by" to "local",
+          "context_length" to backend.contextTokens))))
         return
       }
       if (path != "/v1/chat/completions") fail(404, "Unknown endpoint")
@@ -184,7 +186,7 @@ internal class OpenAiServer(
     }
   }
 
-  internal fun parse(body: String): ChatRequest = ApiProtocol.parse(body, backend.modelId)
+  internal fun parse(body: String): ChatRequest = ApiProtocol.parse(body, backend.modelId, backend.contextTokens)
 
   private fun line(input: InputStream): String {
     val bytes = java.io.ByteArrayOutputStream()

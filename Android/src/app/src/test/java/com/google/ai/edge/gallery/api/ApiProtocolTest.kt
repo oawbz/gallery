@@ -110,4 +110,32 @@ class ApiProtocolTest {
     assertFalse(deltas.toString().contains("private thoughts"))
     assertEquals(0, call.wire(0)["index"])
   }
+  @Test fun nativeToolConversationIsPreparedWithoutMetadataOptIn() {
+    // Reproduce the reported curl: tool request plus a model file whose metadata does
+    // not declare function calling. Request preparation needs no opt-in flag/name match.
+    val request = parse("""{"role":"system","content":"用中文回答"},$user""",
+      """, "tools":[$tool],"tool_choice":"required","temperature":0,"max_tokens":512""")
+    val messages = LiteRtProtocol.messages(request) { error("No image expected") }
+    val config = LiteRtProtocol.conversationConfig(request,messages)
+    assertEquals(1,config.tools.size)
+    assertFalse(config.automaticToolCalling)
+    assertTrue(config.initialMessages.isEmpty())
+    assertTrue(config.systemInstruction.toString().startsWith("用中文回答"))
+    assertTrue(config.systemInstruction.toString().contains("must call"))
+    assertEquals(512,config.maxOutputToken)
+  }
+
+  @Test fun nativeToolContinuationRetainsAssistantCallAndResumesFromResults() {
+    val request = parse("$user,$assistant,$result2,$result1", """, "tools":[$tool]""")
+    val messages = LiteRtProtocol.messages(request) { error("No image expected") }
+    val config = LiteRtProtocol.conversationConfig(request,messages)
+    assertEquals(1,config.tools.size)
+    assertFalse(config.automaticToolCalling)
+    assertEquals(2,config.initialMessages.size)
+    assertEquals(2,config.initialMessages.last().toolCalls.size)
+    assertEquals(2,messages.last().contents.contents.filterIsInstance<Content.ToolResponse>().size)
+    val none = request.copy(toolChoice = "none")
+    assertTrue(LiteRtProtocol.conversationConfig(none,messages).tools.isEmpty())
+  }
+
 }

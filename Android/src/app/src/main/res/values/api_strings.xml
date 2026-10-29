@@ -8,7 +8,7 @@
   <string name="api_loading">Loading model…</string>
   <string name="api_running">Service is running</string>
   <string name="api_stopped">Service is stopped</string>
-  <string name="api_error">Could not start service. Check the model, available memory, backend and port; try CPU if GPU fails.</string>
+  <string name="api_error">Could not start service. Check context length, model, available memory, backend and port; lower context length or try CPU.</string>
   <string name="api_no_models">Download or import a .litertlm chat model first</string>
   <string name="api_refresh">Refresh models</string>
   <string name="api_port">Port (1024–65535)</string>
@@ -57,4 +57,7 @@
   <string name="settings_saved_token">Saved access token</string>
   <string name="settings_about">About &amp; licenses</string>
   <string name="model_catalog_load_failed">Could not load the model list</string>
+  <string name="api_context_label">Context length (tokens)</string>
+  <string name="api_context_hint">Default 32K (32768); range 1024–262144. Includes history, images, tools and output. Larger settings need more memory; reduce this value if the model cannot start. Stop the service to change it.</string>
+  <string name="api_context_active">Configured context: %1$d tokens</string>
 </resources>

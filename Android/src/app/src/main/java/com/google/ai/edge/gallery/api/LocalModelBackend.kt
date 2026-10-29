@@ -17,8 +17,6 @@
 package com.google.ai.edge.gallery.api
 
 import com.google.ai.edge.litertlm.Backend
-import com.google.ai.edge.litertlm.Contents
-import com.google.ai.edge.litertlm.ConversationConfig
 import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
 import com.google.ai.edge.litertlm.Message
@@ -26,7 +24,6 @@ import com.google.ai.edge.litertlm.MessageCallback
 import com.google.ai.edge.litertlm.ModelInfo
 import com.google.ai.edge.litertlm.Modality
 import com.google.ai.edge.litertlm.BackendType
-import com.google.ai.edge.litertlm.SamplerConfig
 import java.io.File
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.LinkedBlockingQueue
@@ -34,21 +31,22 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 
 /** Owns a separate engine; API conversations never mutate Gallery chat history. */
-internal class LocalModelBackend(file: File, gpu: Boolean) : ChatBackend {
+internal class LocalModelBackend(file: File, gpu: Boolean, override val contextTokens: Int = DEFAULT_CONTEXT_TOKENS) : ChatBackend {
+  init { require(validContextTokens(contextTokens)) { "Context must be between 1024 and 262144 tokens" } }
   override val modelId = file.nameWithoutExtension
   private val capabilities = ModelInfo.from(file.absolutePath).use { info ->
-    Triple(info.inputModalities().vision, (info as? ModelInfo.Llm)?.supportsFunctionCalling() == true,
-      if (info.inputModalities().vision) info.supportedBackends(Modality.VISION) else emptyList())
+    val vision = info.inputModalities().vision
+    vision to if (vision) info.supportedBackends(Modality.VISION) else emptyList()
   }
   private val engine = Engine(EngineConfig(
     modelPath = file.absolutePath, backend = if (gpu) Backend.GPU() else Backend.CPU(),
     visionBackend = if (!capabilities.first) null else when {
-      BackendType.GPU in capabilities.third -> Backend.GPU()
-      BackendType.CPU in capabilities.third -> Backend.CPU()
+      BackendType.GPU in capabilities.second -> Backend.GPU()
+      BackendType.CPU in capabilities.second -> Backend.CPU()
       else -> throw IllegalArgumentException("No supported vision backend")
     },
     maxNumImages = if (capabilities.first) MAX_IMAGES else null,
-    maxNumTokens = 4096,
+    maxNumTokens = contextTokens,
   ))
   init {
     try { engine.initialize() } catch (e: Exception) { engine.close(); throw e }
@@ -58,9 +56,9 @@ internal class LocalModelBackend(file: File, gpu: Boolean) : ChatBackend {
     if (request.messages.any { m -> m.parts.any { it is ApiPart.Image } } && !capabilities.first) {
       throw ApiFailure(400, "Selected model does not support images")
     }
-    if ((request.activeTools.isNotEmpty() || request.messages.any { it.toolCalls.isNotEmpty() }) && !capabilities.second) {
-      throw ApiFailure(400, "Selected model does not support tool calling")
-    }
+    // supportsFunctionCalling() is an optional protobuf declaration, not a runtime probe.
+    // Missing/false declarations must not prevent native tool conversations from being tried.
+    // Do not infer actual support from the model filename either.
   }
 
   @Synchronized
@@ -68,25 +66,13 @@ internal class LocalModelBackend(file: File, gpu: Boolean) : ChatBackend {
     validate(request)
     val images = ApiImages()
     val messages = LiteRtProtocol.messages(request, images::load)
-    val system = messages.firstOrNull()?.takeIf { request.messages.first().role == "system" }
-    val turns = messages.drop(if (system != null) 1 else 0)
-    val toolInstruction = if (request.toolChoice == "required") {
-      "You must call ${request.selectedTool ?: "one of the provided tools"} for this turn."
-    } else ""
-    engine.createConversation(ConversationConfig(
-      systemInstruction = if (system != null || toolInstruction.isNotEmpty())
-        Contents.of(listOfNotNull(system?.toString(), toolInstruction.takeIf { it.isNotEmpty() }).joinToString("\n")) else null,
-      initialMessages = turns.dropLast(1),
-      tools = LiteRtProtocol.tools(request), automaticToolCalling = false,
-      samplerConfig = SamplerConfig(topK = 40, topP = request.topP, temperature = request.temperature),
-      maxOutputToken = request.maxTokens ?: 512,
-    )).use { conversation ->
+    engine.createConversation(LiteRtProtocol.conversationConfig(request, messages)).use { conversation ->
       val chunks = LinkedBlockingQueue<ApiDelta>(256)
       val done = CountDownLatch(1)
       val error = AtomicReference<Throwable?>()
       var submitted = false
       try {
-        conversation.sendMessageAsync(turns.last(), object : MessageCallback {
+        conversation.sendMessageAsync(messages.last(), object : MessageCallback {
           override fun onMessage(message: Message) {
             LiteRtProtocol.deltas(message).forEach { delta ->
               if (!chunks.offer(delta)) error.compareAndSet(null, IllegalStateException("Client is too slow"))

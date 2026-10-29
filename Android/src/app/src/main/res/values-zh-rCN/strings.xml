@@ -958,7 +958,7 @@
   <string name="api_loading">正在加载模型…</string>
   <string name="api_running">服务正在运行</string>
   <string name="api_stopped">服务已停止</string>
-  <string name="api_error">服务启动失败。请检查模型、可用内存、后端和端口；GPU 失败时可尝试 CPU。</string>
+  <string name="api_error">服务启动失败。请检查上下文长度、模型、可用内存、后端和端口；可降低上下文或尝试 CPU。</string>
   <string name="api_no_models">请先下载或导入 .litertlm 聊天模型</string>
   <string name="api_refresh">刷新模型</string>
   <string name="api_port">端口（1024—65535）</string>
@@ -1007,4 +1007,7 @@
   <string name="settings_saved_token">已保存的访问令牌</string>
   <string name="settings_about">关于与许可</string>
   <string name="model_catalog_load_failed">无法加载模型列表</string>
+  <string name="api_context_label">上下文长度（tokens）</string>
+  <string name="api_context_hint">默认 32K（32768），范围 1024–262144。包含历史、图片、工具与输出。较大设置需要更多内存；模型无法启动时请降低此值。停止服务后可修改。</string>
+  <string name="api_context_active">已配置上下文：%1$d tokens</string>
 </resources>

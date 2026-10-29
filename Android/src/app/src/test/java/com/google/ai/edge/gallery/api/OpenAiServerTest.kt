@@ -229,4 +229,35 @@ class OpenAiServerTest {
     }
   }
 
+  @Test fun configuredContextIsAdvertisedAndControlsOutputLimits() {
+    val backend = object : FakeBackend() { override val contextTokens = 131072 }
+    OpenAiServer("127.0.0.1",0,key,backend).use { server ->
+      val (_, models) = request(server,"/v1/models")
+      assertEquals(131072,JsonParser.parseString(models).asJsonObject.getAsJsonArray("data")[0].asJsonObject["context_length"].asInt)
+      assertEquals(200,request(server,"/v1/chat/completions",body(",\"max_tokens\":65536")).first)
+      assertEquals(65536,backend.requests.last().maxTokens)
+      assertEquals(400,request(server,"/v1/chat/completions",body(",\"max_completion_tokens\":131073")).first)
+    }
+    val defaultBackend = FakeBackend()
+    OpenAiServer("127.0.0.1",0,key,defaultBackend).use { server ->
+      assertEquals(32768,defaultBackend.contextTokens)
+      assertEquals(200,request(server,"/v1/chat/completions",body(",\"max_tokens\":8192")).first)
+      assertEquals(400,request(server,"/v1/chat/completions",body(",\"max_tokens\":32769")).first)
+    }
+  }
+
+  @Test fun context256kIsAcceptedWithoutChanging32kDefault() {
+    val backend = object : FakeBackend() { override val contextTokens = 262144 }
+    OpenAiServer("127.0.0.1",0,key,backend).use { server ->
+      val (_, models) = request(server,"/v1/models")
+      assertEquals(262144,JsonParser.parseString(models).asJsonObject.getAsJsonArray("data")[0].asJsonObject["context_length"].asInt)
+      assertEquals(200,request(server,"/v1/chat/completions",body(",\"max_completion_tokens\":196608")).first)
+      assertEquals(196608,backend.requests.last().maxTokens)
+      assertEquals(400,request(server,"/v1/chat/completions",body(",\"max_tokens\":262145")).first)
+    }
+    assertEquals(32768,FakeBackend().contextTokens)
+    assertTrue(validContextTokens(262144))
+    assertFalse(validContextTokens(262145))
+  }
+
 }

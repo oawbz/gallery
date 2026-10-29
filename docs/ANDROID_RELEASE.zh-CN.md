@@ -1,8 +1,12 @@
-简体中文界面与 Android 本地 OpenAI 兼容 API 服务测试版，版本 1.0.20-api3。
+简体中文界面与 Android 本地 OpenAI 兼容 API 服务测试版，版本 1.0.20-api4。
 
-本版为 OpenAI 兼容 API 增加图片和工具调用。`content` 可包含 `text`、`image_url`；图片可使用 Base64 data URL 或 HTTP(S) 地址，支持 PNG、JPEG、WebP。工具调用使用原生 LiteRT-LM 接口，支持 `tools`、`tool_choice`、`parallel_tool_calls`、结构化 `tool_calls`、工具结果回传及 SSE；工具由客户端执行，App 不执行客户端声明的工具。需要所选模型实际支持对应能力。
+新增上下文配置，默认 32K（32768），可手动设置 1024—262144，提供 8K/16K/32K/64K/128K/256K 快捷选项。实际传给引擎的预算会显示在服务状态中，并通过模型列表的 `context_length` 返回。大上下文能否启动取决于模型文件、后端和内存，不会静默降级。
 
-沿用原有 GitHub Actions 固定签名，versionCode 增至 49，可覆盖安装上一版相同签名的 APK。图片理解和工具选择效果仍需真机与模型实测；云端测试不加载模型权重。
+本版修复 API 在推理前返回 `Selected model does not support tool calling` 的问题：不再把模型文件中未声明或为 false 的工具能力标记当作绝对拒绝条件，而是将工具定义和历史交给原生运行时尝试。此修复不保证每个模型都会生成工具调用，真实支持情况仍需设备验证。
+
+OpenAI 兼容 API 支持图片和工具调用。`content` 可包含 `text`、`image_url`；图片可使用 Base64 data URL 或 HTTP(S) 地址，支持 PNG、JPEG、WebP。工具调用使用原生 LiteRT-LM 接口，支持 `tools`、`tool_choice`、`parallel_tool_calls`、结构化 `tool_calls`、工具结果回传及 SSE；工具由客户端执行，App 不执行客户端声明的工具。需要所选模型实际支持对应能力。
+
+沿用原有 GitHub Actions 固定签名，versionCode 增至 50，可覆盖安装上一版相同签名的 APK。图片理解和工具选择效果仍需真机与模型实测；云端测试不加载模型权重。
 
 设置和 API 服务页面已按原应用 Material 3 风格重排，使用分组卡片、固定启停按钮和主题配色。地址、健康检查地址、模型 ID 与 API Key 可一键复制；密钥默认隐藏，敏感剪贴板内容标记为敏感信息。
 

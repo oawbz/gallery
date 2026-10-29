@@ -17,6 +17,8 @@
 package com.google.ai.edge.gallery.api
 
 import com.google.ai.edge.litertlm.Content
+import com.google.ai.edge.litertlm.ConversationConfig
+import com.google.ai.edge.litertlm.SamplerConfig
 import com.google.ai.edge.litertlm.Contents
 import com.google.ai.edge.litertlm.Message
 import com.google.ai.edge.litertlm.OpenApiTool
@@ -69,6 +71,23 @@ internal object LiteRtProtocol {
       index++
     }
     return result
+  }
+
+  /** Tool descriptions always reach the native runtime; metadata opt-in is not required. */
+  fun conversationConfig(request: ChatRequest, messages: List<Message>): ConversationConfig {
+    val system = messages.firstOrNull()?.takeIf { request.messages.first().role == "system" }
+    val turns = messages.drop(if (system != null) 1 else 0)
+    val toolInstruction = if (request.toolChoice == "required") {
+      "You must call ${request.selectedTool ?: "one of the provided tools"} for this turn."
+    } else ""
+    return ConversationConfig(
+      systemInstruction = if (system != null || toolInstruction.isNotEmpty())
+        Contents.of(listOfNotNull(system?.toString(), toolInstruction.takeIf { it.isNotEmpty() }).joinToString("\n")) else null,
+      initialMessages = turns.dropLast(1),
+      tools = tools(request), automaticToolCalling = false,
+      samplerConfig = SamplerConfig(topK = 40, topP = request.topP, temperature = request.temperature),
+      maxOutputToken = request.maxTokens ?: 512,
+    )
   }
 
   fun deltas(message: Message): List<ApiDelta> = buildList {

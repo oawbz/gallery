@@ -37,6 +37,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 internal data class ApiServerState(
   val active: Boolean = false, val loading: Boolean = false, val error: Boolean = false,
   val errorResource: Int = R.string.api_error, val lan: Boolean = false, val port: Int = 0,
+  val contextTokens: Int = DEFAULT_CONTEXT_TOKENS,
 )
 
 class ApiServerService : Service() {
@@ -71,16 +72,17 @@ class ApiServerService : Service() {
     val key = intent?.getStringExtra("key") ?: ""
     val lan = intent?.getBooleanExtra("lan", false) ?: false
     val gpu = intent?.getBooleanExtra("gpu", false) ?: false
+    val contextTokens = intent?.getIntExtra("context_tokens", DEFAULT_CONTEXT_TOKENS) ?: DEFAULT_CONTEXT_TOKENS
     worker.execute {
       try {
         val file = File(path).canonicalFile
         require(file.toPath().startsWith(getModelStorageDir(this).canonicalFile.toPath()))
         require(file.isFile && file.extension == "litertlm")
-        require(port in 1024..65535 && key.length >= 16)
-        backend = LocalModelBackend(file, gpu)
+        require(port in 1024..65535 && key.length >= 16 && validContextTokens(contextTokens))
+        backend = LocalModelBackend(file, gpu, contextTokens)
         if (!stopping.get()) {
           server = OpenAiServer(if (lan) "0.0.0.0" else "127.0.0.1", port, key, backend!!)
-          state.value = ApiServerState(active = true, lan = lan, port = server!!.port)
+          state.value = ApiServerState(active = true, lan = lan, port = server!!.port, contextTokens = backend!!.contextTokens)
         }
       } catch (_: Exception) {
         if (!stopping.get()) { state.value = ApiServerState(error = true); stopSelf() }

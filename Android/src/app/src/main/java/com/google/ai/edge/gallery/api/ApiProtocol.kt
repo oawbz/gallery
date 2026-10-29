@@ -21,6 +21,11 @@ import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import java.util.Base64
 
+internal const val DEFAULT_CONTEXT_TOKENS = 32768
+internal const val MIN_CONTEXT_TOKENS = 1024
+internal const val MAX_CONTEXT_TOKENS = 262144
+internal fun validContextTokens(value: Int?) = value != null && value in MIN_CONTEXT_TOKENS..MAX_CONTEXT_TOKENS
+
 internal const val MAX_REQUEST_BYTES = 12 * 1024 * 1024
 internal const val MAX_IMAGE_BYTES = 4 * 1024 * 1024
 internal const val MAX_TOTAL_IMAGE_BYTES = 8 * 1024 * 1024
@@ -77,7 +82,7 @@ internal fun decodeDataImage(url: String): ByteArray {
 
 /** Validates the tool-result state machine before any native inference or image downloads. */
 internal object ApiProtocol {
-  fun parse(body: String, modelId: String): ChatRequest {
+  fun parse(body: String, modelId: String, contextTokens: Int = DEFAULT_CONTEXT_TOKENS): ChatRequest {
     try {
       val obj = JsonParser.parseString(body).asJsonObject
       if (string(obj, "model") != modelId) throw ApiFailure(404, "Unknown model; use GET /v1/models")
@@ -157,7 +162,7 @@ internal object ApiProtocol {
         return n
       }
       val tokenKey = if (obj.has("max_completion_tokens")) "max_completion_tokens" else "max_tokens"
-      val tokens = if (obj.has(tokenKey)) number(tokenKey, 512.0, 1.0..4096.0).also {
+      val tokens = if (obj.has(tokenKey)) number(tokenKey, 512.0, 1.0..contextTokens.toDouble()).also {
         if (it % 1.0 != 0.0) invalid("Token limit must be an integer")
       }.toInt() else null
       return ChatRequest(messages, boolean("stream", false), number("temperature", 0.7, 0.0..2.0),
