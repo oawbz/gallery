@@ -129,6 +129,13 @@ internal class OpenAiServer(
       val responsesRequest = if (path == "/v1/responses") ApiResponses.parse(body,backend) else null
       val request = responsesRequest?.chat ?: parse(body)
       if (!busy.compareAndSet(false, true)) fail(429, "Model is busy; retry after the current request")
+      var ownsInference = true
+      fun releaseInference() {
+        if (ownsInference) {
+          ownsInference = false
+          busy.set(false)
+        }
+      }
       try {
         backend.validate(request)
         if (responsesRequest != null) {
@@ -138,6 +145,7 @@ internal class OpenAiServer(
           responsesOutput = response
           response.begin()
           val result = complete(backend,request,response::delta)
+          releaseInference()
           val value = response.finish(result)
           if (!request.stream) json(output,200,value) else output.flush()
           return
@@ -165,6 +173,7 @@ internal class OpenAiServer(
             is ApiDelta.Stats -> Unit
           }
         }
+        releaseInference()
         if (request.stream) {
           event(output,chunk(emptyMap(),result.finish))
           if (request.includeUsage) event(output,mapOf("id" to id,"object" to "chat.completion.chunk",
@@ -178,7 +187,7 @@ internal class OpenAiServer(
             "usage" to result.stats?.usage?.wire(),
             "service_tier" to "default","metadata" to request.metadata))
         }
-      } finally { busy.set(false) }
+      } finally { releaseInference() }
     } catch (e: Exception) {
       val status = (e as? ApiFailure)?.status ?: if (e is java.net.SocketTimeoutException) 408 else 500
       val code = when(status) { 401 -> "invalid_api_key"; 404 -> if ((e as? ApiFailure)?.param == "model") "model_not_found" else "not_found";

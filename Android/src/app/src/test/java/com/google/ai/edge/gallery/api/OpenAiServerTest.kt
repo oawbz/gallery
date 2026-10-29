@@ -273,11 +273,13 @@ class OpenAiServerTest {
       val message = JsonParser.parseString(text).asJsonObject.getAsJsonArray("choices")[0].asJsonObject.getAsJsonObject("message")
       assertFalse(message.has("reasoning_content"))
       assertEquals("答案42",message["content"].asString)
-      val (_,stream) = request(server,"/v1/chat/completions",body(",\"stream\":true"))
+      val (streamStatus,stream) = request(server,"/v1/chat/completions",body(",\"stream\":true"))
+      assertEquals(stream,200,streamStatus)
       val events = stream.split("\n\n").filter { it.startsWith("data: {") }.map { JsonParser.parseString(it.removePrefix("data: ")).asJsonObject }
       val deltas = events.map { it.getAsJsonArray("choices")[0].asJsonObject.getAsJsonObject("delta") }
       assertTrue(deltas.none { it.has("reasoning_content") })
-      assertEquals("答案42",deltas[1]["content"].asString)
+      assertTrue(stream,deltas.size >= 2)
+      assertEquals(stream,"答案42",deltas[1]["content"].asString)
       assertTrue(stream.endsWith("data: [DONE]\n\n"))
     }
   }
